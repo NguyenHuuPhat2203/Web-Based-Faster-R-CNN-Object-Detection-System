@@ -6,9 +6,9 @@
 ## Results
 The following results demonstrate the performance of the Faster R-CNN model on validation MRI images after 10 training epochs.
 - mAP@0.5: **0.69**
-    ![mAP@0.5](figures/mAP50.png)
+![mAP@0.5](figures/mAP50.png)
 - mAP@0.5-0.9: **0.49**
-    ![mAP@0.5-0.9](figures/mAP5090.png)
+![mAP@0.5-0.9](figures/mAP5090.png)
 
 ## Problem Statement
 - Brain tumor detection in MRI images is a critical task in medical imaging.
@@ -16,6 +16,7 @@ The following results demonstrate the performance of the Faster R-CNN model on v
 - This project aims to automatically detect tumor regions using deep learning–based object detection.
 
 ## Architecture
+```
 Browser (Frontend)
     |
     | HTTP (Image Upload)
@@ -28,6 +29,7 @@ Faster R-CNN (PyTorch)
     |
     v
 Detection Results (Annotated Image)
+```
 
 ## Dataset
 - Source: Kaggle – Brain-tumor dataset by Ultralytics
@@ -55,6 +57,7 @@ Detection Results (Annotated Image)
 - Hardware: NVIDIA GPU T4
 
 ## Project Structure
+```
 ├── backend/                # FastAPI
 │   └── main.py
 ├── checkpoints/
@@ -77,6 +80,7 @@ Detection Results (Annotated Image)
 ├── .gitignore
 ├── README.md
 └── requirements.txt
+```
 
 ## Installation
 ### 1. Clone this repo
