@@ -196,7 +196,7 @@ async def predict(
     boxes = pred["boxes"][mask].cpu().numpy().tolist()
     labels = pred["labels"][mask].cpu().numpy().tolist()
     scores = pred["scores"][mask].cpu().numpy().tolist()
-    label_names = [CLASS_NAMES.get(l, f"Class {l}") for l in labels]
+    label_names = [CLASS_NAMES.get(label, f"Class {label}") for label in labels]
 
     # ── Grad-CAM heatmap (for best detection) ─────────────────────────
     heatmap: str | None = None

@@ -90,7 +90,7 @@ async def predict_yolo(
     boxes = boxes_data.xyxy.cpu().numpy().tolist()
     scores = boxes_data.conf.cpu().numpy().tolist()
     labels = boxes_data.cls.int().cpu().numpy().tolist()
-    label_names = [_CLASS_NAMES.get(l, f"Class {l}") for l in labels]
+    label_names = [_CLASS_NAMES.get(label, f"Class {label}") for label in labels]
 
     # ── Save to disk + DB ─────────────────────────────────────────
     user_dir = os.path.join(cfg.UPLOAD_DIR, str(current_user.id))

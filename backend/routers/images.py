@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Image as ImageModel, User
-from schemas import ImageOut, ImageList
+from schemas import ImageList
 from dependencies import get_current_user
 
 router = APIRouter(prefix="/images", tags=["images"])
@@ -25,7 +25,7 @@ def list_images(
 ):
     images = (
         db.query(ImageModel)
-        .filter(ImageModel.user_id == current_user.id, ImageModel.deleted == False)
+        .filter(ImageModel.user_id == current_user.id, ~ImageModel.deleted)
         .order_by(ImageModel.uploaded_at.desc())
         .all()
     )
@@ -106,12 +106,6 @@ def generate_report(
     if img.detection_result:
         det = img.detection_result
         scores = det.get("scores", [])
-        label_names = []
-        if "label_names" in det:
-            label_names = det["label_names"]
-        elif "labels" in det:
-            # Simple fallback
-            label_names = [str(l) for l in det["labels"]]
 
         meta.append(["Detections", str(len(scores))])
         if scores:

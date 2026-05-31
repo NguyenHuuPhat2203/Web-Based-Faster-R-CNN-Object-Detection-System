@@ -21,9 +21,9 @@ database.engine = TEST_ENGINE
 database.SessionLocal = TEST_SESSION
 
 # Now it's safe to import app code — it will use our patched engine
-import models  # noqa: F401 — register tables with Base.metadata
-from database import Base, get_db
-from main import app
+import models  # noqa: F401, E402 — register tables with Base.metadata
+from database import Base, get_db  # noqa: E402
+from main import app  # noqa: E402
 
 def override_get_db() -> Generator:
     db = TEST_SESSION()

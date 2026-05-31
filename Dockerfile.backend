@@ -32,8 +32,9 @@ COPY --from=builder /usr/local/bin/ /usr/local/bin/
 COPY backend/ /app/
 RUN rm -rf /app/tests/
 
-# Copy checkpoints (may be empty, that's fine)
-COPY checkpoints /checkpoints/
+# Ensure checkpoints directory exists (copy is excluded by .dockerignore;
+# mount a volume at runtime or place model.pth locally and update .dockerignore)
+RUN mkdir -p /checkpoints
 
 # Production settings
 ENV PYTHONUNBUFFERED=1 \

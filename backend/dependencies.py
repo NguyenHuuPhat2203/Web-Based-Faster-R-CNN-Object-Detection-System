@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -12,7 +11,6 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User, TokenBlacklist
 from auth import decode_token
-import config as cfg
 
 # Accept Bearer token from the Authorization header
 bearer_scheme = HTTPBearer(auto_error=False)
