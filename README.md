@@ -1,3 +1,12 @@
+---
+title: Brain Tumor Detector
+emoji: 🧠
+colorFrom: indigo
+colorTo: dark
+sdk: docker
+pinned: false
+---
+
 # Faster R-CNN Object Detection Application
 - An end-to-end object detection system for detecting brain tumors in MRI images using Faster R-CNN with ResNet-50 backbone.
 - The system allows users to upload images via a web interface and receive detected objects with bounding boxes in real time.
