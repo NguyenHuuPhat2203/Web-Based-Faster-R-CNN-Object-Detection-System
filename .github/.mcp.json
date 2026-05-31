@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "drawio_mcp": {
+      "tools": [
+        "*"
+      ],
+      "type": "http",
+      "url": "https://mcp.draw.io/mcp",
+      "headers": {},
+      "source": "user",
+      "sourcePath": "/home/huuphat/.copilot/mcp-config.json"
+    },
+    "gitnexus": {
+      "type": "local",
+      "command": "gitnexus",
+      "tools": [
+        "*"
+      ],
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}
