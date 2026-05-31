@@ -21,6 +21,9 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Download model checkpoint from Hugging Face Hub at build time
+RUN python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='LuxeFats/FasterRCNN-Checkpoint', filename='model.pth', local_dir='/checkpoints')" 2>/dev/null || echo "Checkpoint download skipped (will download at runtime)"
+
 # ── Runtime ───────────────────────────────────────────────
 FROM python:3.12-slim
 

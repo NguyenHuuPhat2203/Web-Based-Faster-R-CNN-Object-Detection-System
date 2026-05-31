@@ -20,3 +20,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./brain_tumor.db")
 # Uploads
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+
+# Hugging Face checkpoint
+HF_CHECKPOINT_REPO = os.getenv("HF_CHECKPOINT_REPO", "LuxeFats/FasterRCNN-Checkpoint")
+HF_CHECKPOINT_FILENAME = os.getenv("HF_CHECKPOINT_FILENAME", "model.pth")

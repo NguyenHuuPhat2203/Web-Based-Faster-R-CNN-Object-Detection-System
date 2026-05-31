@@ -11,6 +11,9 @@ COPY backend/requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r requirements.txt
 
+# Download model checkpoint from Hugging Face Hub
+RUN python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='LuxeFats/FasterRCNN-Checkpoint', filename='model.pth', local_dir='/checkpoints')" 2>/dev/null || echo "Checkpoint download skipped (will download at runtime)"
+
 # ── Runtime stage ─────────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
 
@@ -32,8 +35,10 @@ COPY --from=builder /usr/local/bin/ /usr/local/bin/
 COPY backend/ /app/
 RUN rm -rf /app/tests/
 
-# Ensure checkpoints directory exists (copy is excluded by .dockerignore;
-# mount a volume at runtime or place model.pth locally and update .dockerignore)
+# Copy pre-downloaded checkpoint from builder (if any)
+COPY --from=builder /checkpoints/ /checkpoints/ 2>/dev/null || true
+
+# Ensure checkpoints directory exists
 RUN mkdir -p /checkpoints
 
 # Production settings

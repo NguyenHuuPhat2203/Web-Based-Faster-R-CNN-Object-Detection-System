@@ -149,10 +149,22 @@ def _load_model() -> tuple[torch.nn.Module, GradCAM | None]:
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, NUM_CLASSES)
 
+    # Try local checkpoint first, fall back to Hugging Face Hub
     checkpoint_path = "../checkpoints/model.pth"
     if os.path.exists(checkpoint_path):
         state = torch.load(checkpoint_path, map_location=DEVICE)
         model.load_state_dict(state, strict=False)
+    else:
+        try:
+            from huggingface_hub import hf_hub_download
+            hf_path = hf_hub_download(
+                repo_id=cfg.HF_CHECKPOINT_REPO,
+                filename=cfg.HF_CHECKPOINT_FILENAME,
+            )
+            state = torch.load(hf_path, map_location=DEVICE)
+            model.load_state_dict(state, strict=False)
+        except Exception:
+            pass  # Run with pretrained weights only
 
     model.to(DEVICE)
     model.eval()
