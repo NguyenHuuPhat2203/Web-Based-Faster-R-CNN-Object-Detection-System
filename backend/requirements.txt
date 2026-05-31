@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+python-multipart
+torch
+torchvision
+pillow
+numpy
+sqlalchemy
+bcrypt
+pyjwt
+cryptography
+requests
+python-dotenv
+pydantic[email]
+ultralytics
+reportlab
+matplotlib
