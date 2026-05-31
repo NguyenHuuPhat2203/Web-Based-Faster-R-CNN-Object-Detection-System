@@ -2,3 +2,9 @@
 __pycache__
 node_modules
 checkpoints
+uploads/
+.env
+*.db
+*.md
+!README.md
+.DS_Store
