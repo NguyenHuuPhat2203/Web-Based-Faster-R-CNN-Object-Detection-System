@@ -2,7 +2,7 @@
 title: Brain Tumor Detector
 emoji: 🧠
 colorFrom: indigo
-colorTo: dark
+colorTo: blue
 sdk: docker
 pinned: false
 ---
