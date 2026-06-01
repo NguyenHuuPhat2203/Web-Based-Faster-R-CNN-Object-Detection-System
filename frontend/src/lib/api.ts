@@ -216,3 +216,57 @@ export function getImageUrl(imageId: number): string {
 export function getReportUrl(imageId: number): string {
   return `${API_BASE}/images/${imageId}/report?t=${Date.now()}`;
 }
+
+/* ---------- Stats API ---------- */
+
+export interface UserStats {
+  total_scans: number;
+  total_detections: number;
+  scans_this_month: number;
+}
+
+export async function fetchUserStats(): Promise<UserStats> {
+  const res = await authFetch("/auth/stats");
+  if (!res.ok) throw new Error("Failed to fetch stats");
+  return res.json();
+}
+
+/* ---------- Profile API ---------- */
+
+export interface ProfileUpdate {
+  username?: string;
+  email?: string;
+}
+
+export async function updateProfile(data: ProfileUpdate): Promise<UserInfo> {
+  const res = await authFetch("/auth/profile", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Update failed" }));
+    throw new Error(err.detail || "Update failed");
+  }
+  return res.json();
+}
+
+/* ---------- Password API ---------- */
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const res = await authFetch("/auth/password", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Password change failed" }));
+    throw new Error(err.detail || "Password change failed");
+  }
+}
