@@ -57,6 +57,40 @@ class UserWithTokens(UserOut):
     refresh_token: str
 
 
+# ── Profile ───────────────────────────────────────────────────────────
+
+class ProfileUpdateRequest(BaseModel):
+    username: str | None = None
+    email: str | None = None
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str | None) -> str | None:
+        if v is not None and "@" not in v:
+            raise ValueError("Invalid email")
+        return v
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("Password must be at least 6 characters")
+        return v
+
+
+# ── Stats ─────────────────────────────────────────────────────────────
+
+class UserStats(BaseModel):
+    total_scans: int
+    total_detections: int
+    scans_this_month: int
+
+
 # ── Detection ─────────────────────────────────────────────────────────
 
 class DetectionOut(BaseModel):
