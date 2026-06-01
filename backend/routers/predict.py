@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import os
 import uuid
@@ -17,7 +18,7 @@ from PIL import Image
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Image as ImageModel, User
+from models import Detection, Image as ImageModel, User
 from schemas import PredictionResult
 from dependencies import get_current_user
 import config as cfg
@@ -224,7 +225,7 @@ async def predict(
         except Exception:
             heatmap = None  # Graceful fallback
 
-    # ── Save to disk + DB ─────────────────────────────────────────────
+    # ── Save to disk + DB ──
     user_dir = os.path.join(cfg.UPLOAD_DIR, str(current_user.id))
     os.makedirs(user_dir, exist_ok=True)
 
@@ -234,20 +235,37 @@ async def predict(
 
     image.save(file_path)
 
-    detection_result = {"boxes": boxes, "labels": labels, "scores": scores}
-
     db_image = ImageModel(
         user_id=current_user.id,
         original_name=file.filename or "unknown",
         stored_name=stored_name,
         filepath=file_path,
         mime_type=file.content_type or "image/jpeg",
-        detection_result=detection_result,
+        width=image.width,
+        height=image.height,
+        file_size=len(contents),
+        content_hash=hashlib.sha256(contents).hexdigest(),
+        model_type="faster-rcnn",
+        model_version="resnet50-fpn-v1",
+        threshold=threshold,
     )
     db.add(db_image)
+    db.flush()
+
+    for box, label, score, label_name in zip(boxes, labels, scores, label_names):
+        db.add(Detection(
+            image_id=db_image.id,
+            label=label,
+            label_name=label_name,
+            score=score,
+            x1=box[0], y1=box[1], x2=box[2], y2=box[3],
+        ))
     db.commit()
+    db.refresh(db_image)
 
     return PredictionResult(
         boxes=boxes, labels=labels, scores=scores, label_names=label_names,
         heatmap=heatmap,
+        model_type="faster-rcnn",
+        model_version="resnet50-fpn-v1",
     )
