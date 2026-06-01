@@ -103,9 +103,8 @@ def generate_report(
         ["Report Generated", __import__("datetime").datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")],
     ]
 
-    if img.detection_result:
-        det = img.detection_result
-        scores = det.get("scores", [])
+    if img.detections:
+        scores = [d.score for d in img.detections]
 
         meta.append(["Detections", str(len(scores))])
         if scores:
@@ -127,17 +126,15 @@ def generate_report(
     story.append(meta_table)
     story.append(Spacer(1, 6*mm))
 
-    # ── Detection details table ───────────────────────────────────────
-    if img.detection_result and img.detection_result.get("boxes"):
-        det = img.detection_result
+    # ── Detection details table ──
+    if img.detections:
         story.append(Paragraph("Findings", styles["Heading2"]))
         story.append(Spacer(1, 3*mm))
 
         data = [["#", "Label", "Confidence", "Location (x1,y1,x2,y2)"]]
-        for i, (box, score) in enumerate(zip(det["boxes"], det["scores"]), 1):
-            label = (det.get("label_names") or [""] * len(det["boxes"]))[i - 1] or f"Class {det['labels'][i-1]}"
-            box_str = f"({box[0]:.0f}, {box[1]:.0f}, {box[2]:.0f}, {box[3]:.0f})"
-            data.append([str(i), label, f"{score * 100:.1f}%", box_str])
+        for i, det in enumerate(img.detections, 1):
+            box_str = f"({det.x1:.0f}, {det.y1:.0f}, {det.x2:.0f}, {det.y2:.0f})"
+            data.append([str(i), det.label_name, f"{det.score * 100:.1f}%", box_str])
 
         findings_table = Table(data, colWidths=[30, 100, 80, 200])
         findings_table.setStyle(TableStyle([
