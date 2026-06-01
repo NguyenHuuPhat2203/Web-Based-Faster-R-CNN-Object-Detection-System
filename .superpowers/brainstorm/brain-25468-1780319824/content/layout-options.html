@@ -1,0 +1,67 @@
+<h2>Dashboard Layout Options</h2>
+<p class="subtitle">How should the dashboard be structured?</p>
+
+<div class="cards">
+  <div class="card" data-choice="sidebar" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>1. Sidebar Layout ★</h3>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <div style="width:80px;min-height:120px;background:#1e293b;border-radius:8px;padding:8px;font-size:10px;color:#94a3b8;display:flex;flex-direction:column;gap:6px">
+          <div style="background:#6366f1;height:20px;border-radius:4px;font-size:8px;color:white;display:flex;align-items:center;justify-content:center">Logo</div>
+          <div style="background:#334155;height:16px;border-radius:4px"></div>
+          <div style="background:#334155;height:16px;border-radius:4px"></div>
+          <div style="background:#334155;height:16px;border-radius:4px"></div>
+          <div style="background:#334155;height:16px;border-radius:4px"></div>
+        </div>
+        <div style="flex:1;min-height:120px;background:#0f172a;border-radius:8px;padding:8px;font-size:10px;color:#94a3b8">
+          <div style="background:#1e293b;height:20px;border-radius:4px;margin-bottom:8px"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="background:#1e293b;height:50px;border-radius:4px"></div>
+            <div style="background:#1e293b;height:50px;border-radius:4px"></div>
+          </div>
+        </div>
+      </div>
+      <p style="margin-top:8px;font-size:13px;color:#94a3b8">Hub layout — sidebar always visible, main content area switches per view</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="tabs" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>2. Tab Navigation</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+        <div style="display:flex;gap:6px">
+          <div style="background:#6366f1;height:20px;border-radius:4px;flex:1;font-size:8px;color:white;display:flex;align-items:center;justify-content:center">Dash</div>
+          <div style="background:#334155;height:20px;border-radius:4px;flex:1;font-size:8px;display:flex;align-items:center;justify-content:center">Scan</div>
+          <div style="background:#334155;height:20px;border-radius:4px;flex:1;font-size:8px;display:flex;align-items:center;justify-content:center">History</div>
+          <div style="background:#334155;height:20px;border-radius:4px;flex:1;font-size:8px;display:flex;align-items:center;justify-content:center">Settings</div>
+        </div>
+        <div style="flex:1;min-height:80px;background:#0f172a;border-radius:8px;padding:8px;font-size:10px;color:#94a3b8">
+          Content area
+        </div>
+      </div>
+      <p style="margin-top:8px;font-size:13px;color:#94a3b8">Simple horizontal tabs — less code, but tabs don't stay visible on scroll</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="grid" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>3. Widget Grid + Top Nav</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="background:#6366f1;height:16px;width:60px;border-radius:4px;font-size:8px;color:white;display:flex;align-items:center;justify-content:center">Logo</div>
+          <div style="display:flex;gap:6px">
+            <div style="background:#1e293b;height:16px;width:40px;border-radius:4px;font-size:8px"></div>
+            <div style="background:#1e293b;height:16px;width:40px;border-radius:4px;font-size:8px"></div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div style="background:#1e293b;height:40px;border-radius:4px"></div>
+          <div style="background:#1e293b;height:40px;border-radius:4px"></div>
+          <div style="background:#1e293b;height:40px;border-radius:4px"></div>
+          <div style="background:#1e293b;height:40px;border-radius:4px"></div>
+        </div>
+      </div>
+      <p style="margin-top:8px;font-size:13px;color:#94a3b8">Info-dense widget layout with top nav — most complex</p>
+    </div>
+  </div>
+</div>
