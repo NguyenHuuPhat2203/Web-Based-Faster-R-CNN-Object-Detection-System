@@ -24,3 +24,4 @@ MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
 # Hugging Face checkpoint
 HF_CHECKPOINT_REPO = os.getenv("HF_CHECKPOINT_REPO", "LuxeFats/FasterRCNN-Checkpoint")
 HF_CHECKPOINT_FILENAME = os.getenv("HF_CHECKPOINT_FILENAME", "model.pth")
+HF_ACCESS_TOKEN = os.getenv("HF_ACCESS_TOKEN", "")
