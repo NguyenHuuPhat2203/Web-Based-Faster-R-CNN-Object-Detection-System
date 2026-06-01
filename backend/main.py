@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import config as cfg
-from database import engine, Base
+from database import engine, Base, SessionLocal
+from models import purge_expired_tokens
 from routers import auth, predict, predict_yolo, images
 
 # ── App ───────────────────────────────────────────────────────────────
@@ -27,6 +28,8 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        purge_expired_tokens(db)
     os.makedirs(cfg.UPLOAD_DIR, exist_ok=True)
 
 # ── Routers ───────────────────────────────────────────────────────────
