@@ -58,21 +58,21 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
 
       {/* Stat Cards */}
       <div className="stats-grid">
-        <div className="stat-card">
+        <div className="dashboard-stat-card">
           <Scan size={24} className="stat-icon" />
           <div>
             <p className="stat-label">Total Scans</p>
             <p className="stat-value">{stats?.total_scans ?? 0}</p>
           </div>
         </div>
-        <div className="stat-card">
+        <div className="dashboard-stat-card">
           <Brain size={24} className="stat-icon" />
           <div>
             <p className="stat-label">Detections Found</p>
             <p className="stat-value">{stats?.total_detections ?? 0}</p>
           </div>
         </div>
-        <div className="stat-card">
+        <div className="dashboard-stat-card">
           <CalendarDays size={24} className="stat-icon" />
           <div>
             <p className="stat-label">Scans This Month</p>
