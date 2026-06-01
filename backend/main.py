@@ -54,3 +54,9 @@ def read_root():
         "device": device,
         "auth": "enabled",
     }
+
+
+@app.get("/healthz")
+def healthz():
+    """Lightweight liveness probe for cronjobs / k8s. No DB dependency."""
+    return {"status": "ok"}
