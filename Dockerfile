@@ -38,6 +38,9 @@ WORKDIR /app
 COPY --from=backend-build /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
 COPY --from=backend-build /usr/local/bin/ /usr/local/bin/
 COPY backend/ /app/
+
+# Copy pre-downloaded checkpoint from builder (if any)
+COPY --from=backend-build /checkpoints/ /checkpoints/
 RUN mkdir -p /checkpoints /app/uploads
 
 # Copy frontend

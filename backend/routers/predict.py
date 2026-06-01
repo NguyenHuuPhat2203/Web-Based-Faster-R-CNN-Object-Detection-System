@@ -154,17 +154,23 @@ def _load_model() -> tuple[torch.nn.Module, GradCAM | None]:
     if os.path.exists(checkpoint_path):
         state = torch.load(checkpoint_path, map_location=DEVICE)
         model.load_state_dict(state, strict=False)
+        print(f"[_load_model] Loaded checkpoint from {checkpoint_path}")
     else:
         try:
             from huggingface_hub import hf_hub_download
+            print("[_load_model] Local checkpoint not found, downloading from HF Hub...")
             hf_path = hf_hub_download(
                 repo_id=cfg.HF_CHECKPOINT_REPO,
                 filename=cfg.HF_CHECKPOINT_FILENAME,
+                token=cfg.HF_ACCESS_TOKEN,
             )
+            print(f"[_load_model] Downloaded to {hf_path}")
             state = torch.load(hf_path, map_location=DEVICE)
             model.load_state_dict(state, strict=False)
-        except Exception:
-            pass  # Run with pretrained weights only
+            print("[_load_model] Checkpoint loaded from HF Hub successfully")
+        except Exception as e:
+            print(f"[_load_model] HF Hub download FAILED: {e}")
+            print("[_load_model] Running with COCO backbone + RANDOM head!")
 
     model.to(DEVICE)
     model.eval()
