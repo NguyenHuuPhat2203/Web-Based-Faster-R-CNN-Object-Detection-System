@@ -10,7 +10,8 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import User, TokenBlacklist
+from dependencies import get_current_user
+from models import User, TokenBlacklist, Image, Detection
 from schemas import (
     RegisterRequest,
     LoginRequest,
@@ -18,6 +19,10 @@ from schemas import (
     LogoutRequest,
     UserWithTokens,
     TokenResponse,
+    UserOut,
+    ProfileUpdateRequest,
+    PasswordChangeRequest,
+    UserStats,
 )
 from auth import (
     hash_password,
@@ -146,6 +151,86 @@ def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
+    )
+
+
+# ── Profile Update ───────────────────────────────────────
+
+@router.put("/profile", response_model=UserOut)
+def update_profile(
+    body: ProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if body.username is not None:
+        current_user.username = body.username
+    if body.email is not None:
+        existing = db.query(User).filter(
+            User.email == body.email, User.id != current_user.id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already in use",
+            )
+        current_user.email = body.email
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+# ── Password Change ──────────────────────────────────────
+
+@router.put("/password")
+def change_password(
+    body: PasswordChangeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not current_user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change password for Google-authenticated accounts",
+        )
+    if not verify_password(body.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect",
+        )
+    current_user.hashed_password = hash_password(body.new_password)
+    db.commit()
+    return {"message": "Password updated successfully"}
+
+
+# ── User Stats ───────────────────────────────────────────
+
+@router.get("/stats", response_model=UserStats)
+def user_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    total_scans = db.query(Image).filter(
+        Image.user_id == current_user.id, ~Image.deleted
+    ).count()
+
+    scans_this_month = db.query(Image).filter(
+        Image.user_id == current_user.id,
+        ~Image.deleted,
+        Image.uploaded_at >= now.replace(day=1),
+    ).count()
+
+    total_detections = db.query(Detection).join(Image).filter(
+        Image.user_id == current_user.id,
+        ~Image.deleted,
+    ).count()
+
+    return UserStats(
+        total_scans=total_scans,
+        total_detections=total_detections,
+        scans_this_month=scans_this_month,
     )
 
 
