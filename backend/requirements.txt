@@ -16,3 +16,4 @@ ultralytics
 reportlab
 matplotlib
 huggingface_hub
+alembic
