@@ -23,12 +23,13 @@ interface HistoryProps {
   onViewImage: (imageId: number, results: PredictionResult | null) => void;
 }
 
-export function History({ onNavigate }: HistoryProps) {
+export function History({ onNavigate, onViewImage }: HistoryProps) {
   const [images, setImages] = useState<ImageInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
 
   const fetchImages = () => {
     setLoading(true);
@@ -40,6 +41,25 @@ export function History({ onNavigate }: HistoryProps) {
   };
 
   useEffect(() => { fetchImages(); }, []);
+
+  // Fetch thumbnails via authFetch (img tags can't send auth headers)
+  useEffect(() => {
+    if (images.length === 0) return;
+    const pending = new Map<number, Promise<void>>();
+
+    for (const img of images) {
+      if (thumbnails[img.id]) continue;
+      pending.set(img.id, (async () => {
+        try {
+          const res = await authFetch(`/images/${img.id}`);
+          if (!res.ok) return;
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          setThumbnails((prev) => ({ ...prev, [img.id]: url }));
+        } catch { /* thumbnail silently fails */ }
+      })());
+    }
+  }, [images]);
 
   const handleDelete = async (id: number) => {
     if (!window.confirm("Delete this scan? This action cannot be undone.")) return;
@@ -120,22 +140,22 @@ export function History({ onNavigate }: HistoryProps) {
       {!loading && !error && filtered.length > 0 && (
         <div className="history-grid">
           {filtered.map((img) => (
-            <div key={img.id} className="history-card">
-              <div className="history-card-img"
-                onClick={() => onViewImage(img.id, img.detections.length > 0 ? detectionsToPredictionResult(img.detections) : null)}>
-                <img src={getImageUrl(img.id)} alt={img.original_name} loading="lazy" />
+            <div key={img.id} className="history-card"
+              onClick={() => onViewImage(img.id, img.detections.length > 0 ? detectionsToPredictionResult(img.detections) : null)}>
+              <div className="history-card-img">
+                <img src={thumbnails[img.id] || getImageUrl(img.id)} alt={img.original_name} loading="lazy" />
               </div>
               <div className="history-card-body">
                 <p className="history-name" title={img.original_name}>{img.original_name}</p>
                 <p className="history-meta">{new Date(img.uploaded_at).toLocaleDateString()}</p>
               </div>
               <div className="history-card-actions">
-                <button className="btn btn-tiny" onClick={() => handleDownloadReport(img.id)}
+                <button className="btn btn-tiny" onClick={(e) => { e.stopPropagation(); handleDownloadReport(img.id); }}
                   title="Download Report">
                   <FileText size={14} />
                 </button>
                 <button className="btn btn-tiny btn-danger"
-                  onClick={() => handleDelete(img.id)}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(img.id); }}
                   disabled={deletingId === img.id}
                   title="Delete">
                   {deletingId === img.id ? <span className="spinner-small" /> : <Trash2 size={14} />}

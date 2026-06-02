@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import {
+  authFetch,
   fetchUserStats,
   listImages,
   getImageUrl,
@@ -23,11 +24,12 @@ interface DashboardHomeProps {
   onViewImage: (imageId: number, results: PredictionResult | null) => void;
 }
 
-export function DashboardHome({ onNavigate }: DashboardHomeProps) {
+export function DashboardHome({ onNavigate, onViewImage }: DashboardHomeProps) {
   const [stats, setStats] = useState<UserStats | null>(null);
   const [recentImages, setRecentImages] = useState<ImageInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
 
   useEffect(() => {
     Promise.all([fetchUserStats(), listImages()])
@@ -38,6 +40,23 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
       .catch((err) => setError(err.message || "Failed to load dashboard"))
       .finally(() => setLoading(false));
   }, []);
+
+  // Fetch thumbnails via authFetch (img tags can't send auth headers)
+  useEffect(() => {
+    if (recentImages.length === 0) return;
+    for (const img of recentImages) {
+      if (thumbnails[img.id]) continue;
+      authFetch(`/images/${img.id}`)
+        .then((r) => (r.ok ? r.blob() : null))
+        .then((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            setThumbnails((prev) => ({ ...prev, [img.id]: url }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [recentImages]);
 
   if (loading) {
     return (
@@ -119,7 +138,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                 onClick={() => onViewImage(img.id, img.detections.length > 0 ? detectionsToPredictionResult(img.detections) : null)}
               >
                 <img
-                  src={getImageUrl(img.id)}
+                  src={thumbnails[img.id] || getImageUrl(img.id)}
                   alt={img.original_name}
                   className="recent-thumb"
                 />
