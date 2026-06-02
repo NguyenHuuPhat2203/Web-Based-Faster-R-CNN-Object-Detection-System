@@ -198,8 +198,34 @@ export interface ImageInfo {
   id: number;
   original_name: string;
   mime_type: string;
-  detection_result: PredictionResult | null;
   uploaded_at: string;
+  width: number | null;
+  height: number | null;
+  file_size: number | null;
+  model_type: string | null;
+  model_version: string | null;
+  threshold: number | null;
+  detections: DetectionInfo[];
+}
+
+export interface DetectionInfo {
+  label: number;
+  label_name: string;
+  score: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/** Convert the backend's detections array to the PredictionResult format used by the Detector. */
+export function detectionsToPredictionResult(detections: DetectionInfo[]): PredictionResult {
+  return {
+    boxes: detections.map((d) => [d.x1, d.y1, d.x2, d.y2]),
+    labels: detections.map((d) => d.label),
+    scores: detections.map((d) => d.score),
+    label_names: detections.map((d) => d.label_name),
+  };
 }
 
 export async function listImages(): Promise<ImageInfo[]> {

@@ -7,6 +7,7 @@ import {
 import { WebcamCapture } from "./WebcamCapture";
 import {
   predict,
+  getImageUrl,
   getReportUrl,
   authFetch,
   type PredictionResult,
@@ -35,7 +36,12 @@ interface Measurement {
   x1: number; y1: number; x2: number; y2: number;
 }
 
-export function Detector() {
+export interface DetectorProps {
+  initialImageId?: number;
+  initialResults?: PredictionResult | null;
+}
+
+export function Detector({ initialImageId, initialResults }: DetectorProps) {
   // -- Mode --
   const [useWebcam, setUseWebcam] = useState(false);
 
@@ -77,6 +83,36 @@ export function Detector() {
     setMeasurements([]);
     setShowHeatmap(false);
   }, []);
+
+  // Load a historical image when navigating from history / dashboard
+  useEffect(() => {
+    if (initialImageId == null) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const resp = await fetch(getImageUrl(initialImageId));
+        if (!resp.ok) throw new Error("Failed to load image");
+        const blob = await resp.blob();
+        const file = new File([blob], `scan-${initialImageId}.jpg`, { type: blob.type });
+        if (cancelled) return;
+        setImage(file);
+        setPreview(URL.createObjectURL(blob));
+        setLatestImageId(initialImageId);
+      } catch (err: any) {
+        if (!cancelled) setDetectError(err.message || "Failed to load image");
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [initialImageId]);
+
+  // Set results when navigating from history / dashboard
+  useEffect(() => {
+    if (initialResults) {
+      setResults(initialResults);
+    }
+  }, [initialResults]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

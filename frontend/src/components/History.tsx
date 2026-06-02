@@ -12,12 +12,15 @@ import {
   getImageUrl,
   getReportUrl,
   authFetch,
+  detectionsToPredictionResult,
   type ImageInfo,
+  type PredictionResult,
 } from "../lib/api";
 import type { DashboardPage } from "./Sidebar";
 
 interface HistoryProps {
   onNavigate: (page: DashboardPage) => void;
+  onViewImage: (imageId: number, results: PredictionResult | null) => void;
 }
 
 export function History({ onNavigate }: HistoryProps) {
@@ -118,7 +121,8 @@ export function History({ onNavigate }: HistoryProps) {
         <div className="history-grid">
           {filtered.map((img) => (
             <div key={img.id} className="history-card">
-              <div className="history-card-img" onClick={() => onNavigate("detector")}>
+              <div className="history-card-img"
+                onClick={() => onViewImage(img.id, img.detections.length > 0 ? detectionsToPredictionResult(img.detections) : null)}>
                 <img src={getImageUrl(img.id)} alt={img.original_name} loading="lazy" />
               </div>
               <div className="history-card-body">

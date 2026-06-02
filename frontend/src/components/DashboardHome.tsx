@@ -7,11 +7,20 @@ import {
   ArrowRight,
   Image as ImageIcon,
 } from "lucide-react";
-import { fetchUserStats, listImages, getImageUrl, type UserStats, type ImageInfo } from "../lib/api";
+import {
+  fetchUserStats,
+  listImages,
+  getImageUrl,
+  detectionsToPredictionResult,
+  type UserStats,
+  type ImageInfo,
+  type PredictionResult,
+} from "../lib/api";
 import type { DashboardPage } from "./Sidebar";
 
 interface DashboardHomeProps {
   onNavigate: (page: DashboardPage) => void;
+  onViewImage: (imageId: number, results: PredictionResult | null) => void;
 }
 
 export function DashboardHome({ onNavigate }: DashboardHomeProps) {
@@ -107,7 +116,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
               <button
                 key={img.id}
                 className="recent-item"
-                onClick={() => onNavigate("detector")}
+                onClick={() => onViewImage(img.id, img.detections.length > 0 ? detectionsToPredictionResult(img.detections) : null)}
               >
                 <img
                   src={getImageUrl(img.id)}
