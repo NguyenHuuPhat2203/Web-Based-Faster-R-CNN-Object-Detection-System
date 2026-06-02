@@ -23,7 +23,12 @@ function App() {
   }, [isAuth, page]);
 
   if (loading) {
-    return <div className="loading-screen"><div className="spinner" /></div>;
+    return (
+      <div className="loading-screen" style={{ flexDirection: "column", gap: "1rem" }}>
+        <div className="spinner" />
+        <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>NeuroScan AI — Loading</p>
+      </div>
+    );
   }
 
   if (page === "oauth-callback") {

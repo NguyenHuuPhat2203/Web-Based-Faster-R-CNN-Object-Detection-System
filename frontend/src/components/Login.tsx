@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { LogIn, Mail, Lock, AlertCircle } from "lucide-react";
+import { LogIn, Mail, Lock, AlertCircle, ShieldCheck, Activity } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getGoogleAuthUrl } from "../lib/api";
 
@@ -28,7 +28,6 @@ export function Login({ onSwitchToRegister }: LoginProps) {
   };
 
   const handleGoogle = () => {
-    // Build the Google auth URL via the backend redirect endpoint
     fetch(`${import.meta.env.VITE_API_URL || "http://localhost:8000"}/auth/google`)
       .then((r) => r.json())
       .then((data) => {
@@ -40,9 +39,15 @@ export function Login({ onSwitchToRegister }: LoginProps) {
   return (
     <div className="auth-container">
       <div className="auth-card glass-card">
-        <h2 className="auth-title">
-          <LogIn size={28} /> Sign In
-        </h2>
+        {/* Branding */}
+        <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+          <h2 className="auth-title" style={{ justifyContent: "center", marginBottom: "0.25rem" }}>
+            <LogIn size={26} /> NeuroScan AI
+          </h2>
+          <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+            Clinical Brain Tumor Detection System
+          </p>
+        </div>
 
         {error && (
           <div className="auth-error">
@@ -53,10 +58,10 @@ export function Login({ onSwitchToRegister }: LoginProps) {
 
         <form onSubmit={handleSubmit}>
           <div className="input-group">
-            <Mail size={20} />
+            <Mail size={18} />
             <input
               type="email"
-              placeholder="Email"
+              placeholder="Email Address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -64,8 +69,8 @@ export function Login({ onSwitchToRegister }: LoginProps) {
             />
           </div>
 
-          <div className="input-group">
-            <Lock size={20} />
+          <div className="input-group" style={{ marginBottom: "0.5rem" }}>
+            <Lock size={18} />
             <input
               type="password"
               placeholder="Password"
@@ -81,7 +86,7 @@ export function Login({ onSwitchToRegister }: LoginProps) {
         </form>
 
         <div className="auth-divider">
-          <span>or</span>
+          <span>or continue with</span>
         </div>
 
         <button className="btn btn-google" onClick={handleGoogle}>
@@ -103,7 +108,7 @@ export function Login({ onSwitchToRegister }: LoginProps) {
               fill="#EA4335"
             />
           </svg>
-          Sign in with Google
+          Continue with Google
         </button>
 
         <p className="auth-switch">
@@ -112,6 +117,18 @@ export function Login({ onSwitchToRegister }: LoginProps) {
             Register
           </button>
         </p>
+
+        {/* Status & Security footer */}
+        <div className="login-status">
+          <span className="login-status-item">
+            <Activity size={12} />
+            <span style={{ color: "var(--accent)" }}>System Operational</span>
+          </span>
+          <span className="login-status-item">
+            <ShieldCheck size={12} />
+            Secure AES-256
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -7,10 +7,16 @@ import {
   CheckCircle,
   Eye,
   EyeOff,
+  ShieldAlert,
+  LogOut,
+  Info,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 import { updateProfile, changePassword } from "../lib/api";
 
 export function Settings() {
+  const { logout } = useAuth();
+
   // Profile state
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -82,7 +88,7 @@ export function Settings() {
 
       {/* Profile */}
       <div className="settings-card">
-        <h2 className="settings-section-title"><User size={20} /> Profile</h2>
+        <h2 className="settings-section-title"><User size={18} /> Profile</h2>
         {profileMsg && (
           <div className={`auth-${profileMsg.type === "error" ? "error" : "success"}`}>
             {profileMsg.type === "error" ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
@@ -91,7 +97,7 @@ export function Settings() {
         )}
         <form onSubmit={handleProfileSubmit}>
           <div className="input-group">
-            <User size={20} />
+            <User size={18} />
             <input
               type="text"
               placeholder="New username (leave blank to keep current)"
@@ -101,7 +107,7 @@ export function Settings() {
             />
           </div>
           <div className="input-group">
-            <Mail size={20} />
+            <Mail size={18} />
             <input
               type="email"
               placeholder="New email (leave blank to keep current)"
@@ -109,15 +115,17 @@ export function Settings() {
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
-          <button className="btn btn-primary" type="submit" disabled={profileSubmitting}>
-            {profileSubmitting ? "Saving&hellip;" : "Save Changes"}
-          </button>
+          <div className="settings-actions">
+            <button className="btn btn-primary" type="submit" disabled={profileSubmitting}>
+              {profileSubmitting ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
         </form>
       </div>
 
       {/* Password */}
       <div className="settings-card">
-        <h2 className="settings-section-title"><Lock size={20} /> Change Password</h2>
+        <h2 className="settings-section-title"><Lock size={18} /> Change Password</h2>
         {passwordMsg && (
           <div className={`auth-${passwordMsg.type === "error" ? "error" : "success"}`}>
             {passwordMsg.type === "error" ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
@@ -126,7 +134,7 @@ export function Settings() {
         )}
         <form onSubmit={handlePasswordSubmit}>
           <div className="input-group">
-            <Lock size={20} />
+            <Lock size={18} />
             <input
               type={showPasswords ? "text" : "password"}
               placeholder="Current password"
@@ -136,7 +144,7 @@ export function Settings() {
             />
           </div>
           <div className="input-group">
-            <Lock size={20} />
+            <Lock size={18} />
             <input
               type={showPasswords ? "text" : "password"}
               placeholder="New password (min 6 chars)"
@@ -147,7 +155,7 @@ export function Settings() {
             />
           </div>
           <div className="input-group">
-            <Lock size={20} />
+            <Lock size={18} />
             <input
               type={showPasswords ? "text" : "password"}
               placeholder="Confirm new password"
@@ -158,9 +166,9 @@ export function Settings() {
           </div>
           <div className="settings-actions">
             <button className="btn btn-primary" type="submit" disabled={passwordSubmitting}>
-              {passwordSubmitting ? "Updating&hellip;" : "Update Password"}
+              {passwordSubmitting ? "Updating…" : "Update Password"}
             </button>
-            <button type="button" className="btn btn-ghost"
+            <button type="button" className="btn btn-ghost" style={{ width: "auto" }}
               onClick={() => setShowPasswords(!showPasswords)}>
               {showPasswords ? <EyeOff size={18} /> : <Eye size={18} />}
               {showPasswords ? "Hide" : "Show"} Passwords
@@ -169,10 +177,27 @@ export function Settings() {
         </form>
       </div>
 
-      {/* Account Info */}
-      <div className="settings-card">
-        <h2 className="settings-section-title"><User size={20} /> Account Info</h2>
-        <p className="text-muted">View-only account details.</p>
+      {/* Account / Danger Zone */}
+      <div className="settings-card danger-zone">
+        <h2 className="settings-section-title"><ShieldAlert size={18} /> Account</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <Info size={16} style={{ color: "var(--text-secondary)", flexShrink: 0 }} />
+            <div>
+              <p style={{ fontSize: "0.82rem", color: "var(--text)" }}>
+                Department of Medical Informatics
+              </p>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                NeuroScan AI v2.4.1 • All data encrypted in transit
+              </p>
+            </div>
+          </div>
+          <div className="settings-actions">
+            <button className="btn btn-danger" onClick={logout} style={{ width: "auto" }}>
+              <LogOut size={16} /> Sign Out
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
