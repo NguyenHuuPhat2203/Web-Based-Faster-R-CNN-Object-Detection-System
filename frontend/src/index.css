@@ -1110,7 +1110,7 @@ canvas {
 .viewer-close {
     position: absolute;
     top: 0.5rem;
-    left: 0.5rem;
+    right: 0.5rem;
     z-index: 10;
     background: rgba(0, 0, 0, 0.6);
     border: none;
