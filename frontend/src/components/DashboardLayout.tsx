@@ -4,35 +4,33 @@ import { DashboardHome } from "./DashboardHome";
 import { Detector } from "./Detector";
 import { History } from "./History";
 import { Settings } from "./Settings";
+import { ImageViewer } from "./ImageViewer";
 import { type PredictionResult } from "../lib/api";
 
 export function DashboardLayout() {
   const [page, setPage] = useState<DashboardPage>("home");
-  const [viewingImage, setViewingImage] = useState<{
+  const [viewerImage, setViewerImage] = useState<{
     id: number;
     results: PredictionResult | null;
   } | null>(null);
 
   const handleViewImage = useCallback(
     (imageId: number, results: PredictionResult | null) => {
-      setViewingImage({ id: imageId, results });
-      setPage("detector");
+      setViewerImage({ id: imageId, results });
     },
     [],
   );
+
+  const closeViewer = useCallback(() => {
+    setViewerImage(null);
+  }, []);
 
   const renderPage = () => {
     switch (page) {
       case "home":
         return <DashboardHome onNavigate={setPage} onViewImage={handleViewImage} />;
       case "detector":
-        return (
-          <Detector
-            key={viewingImage?.id ?? "new"}
-            initialImageId={viewingImage?.id}
-            initialResults={viewingImage?.results ?? null}
-          />
-        );
+        return <Detector />;
       case "history":
         return <History onNavigate={setPage} onViewImage={handleViewImage} />;
       case "settings":
@@ -46,6 +44,13 @@ export function DashboardLayout() {
       <main className="dashboard-content">
         {renderPage()}
       </main>
+      {viewerImage && (
+        <ImageViewer
+          imageId={viewerImage.id}
+          results={viewerImage.results}
+          onClose={closeViewer}
+        />
+      )}
     </div>
   );
 }
