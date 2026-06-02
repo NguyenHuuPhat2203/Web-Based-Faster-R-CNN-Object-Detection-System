@@ -91,7 +91,7 @@ export function Detector({ initialImageId, initialResults }: DetectorProps) {
 
     (async () => {
       try {
-        const resp = await fetch(getImageUrl(initialImageId));
+        const resp = await authFetch(`/images/${initialImageId}`);
         if (!resp.ok) throw new Error("Failed to load image");
         const blob = await resp.blob();
         const file = new File([blob], `scan-${initialImageId}.jpg`, { type: blob.type });
