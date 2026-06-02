@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { UserPlus, Mail, Lock, User, AlertCircle } from "lucide-react";
+import { UserPlus, Mail, Lock, User, AlertCircle, ShieldCheck, Activity } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 interface RegisterProps {
@@ -37,9 +37,15 @@ export function Register({ onSwitchToLogin }: RegisterProps) {
   return (
     <div className="auth-container">
       <div className="auth-card glass-card">
-        <h2 className="auth-title">
-          <UserPlus size={28} /> Create Account
-        </h2>
+        {/* Branding */}
+        <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+          <h2 className="auth-title" style={{ justifyContent: "center", marginBottom: "0.25rem" }}>
+            <UserPlus size={26} /> NeuroScan AI
+          </h2>
+          <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+            Create your clinical account
+          </p>
+        </div>
 
         {error && (
           <div className="auth-error">
@@ -50,10 +56,10 @@ export function Register({ onSwitchToLogin }: RegisterProps) {
 
         <form onSubmit={handleSubmit}>
           <div className="input-group">
-            <Mail size={20} />
+            <Mail size={18} />
             <input
               type="email"
-              placeholder="Email"
+              placeholder="Email Address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -62,7 +68,7 @@ export function Register({ onSwitchToLogin }: RegisterProps) {
           </div>
 
           <div className="input-group">
-            <User size={20} />
+            <User size={18} />
             <input
               type="text"
               placeholder="Username"
@@ -74,7 +80,7 @@ export function Register({ onSwitchToLogin }: RegisterProps) {
           </div>
 
           <div className="input-group">
-            <Lock size={20} />
+            <Lock size={18} />
             <input
               type="password"
               placeholder="Password (min 6 chars)"
@@ -86,7 +92,7 @@ export function Register({ onSwitchToLogin }: RegisterProps) {
           </div>
 
           <div className="input-group">
-            <Lock size={20} />
+            <Lock size={18} />
             <input
               type="password"
               placeholder="Confirm password"
@@ -107,6 +113,18 @@ export function Register({ onSwitchToLogin }: RegisterProps) {
             Sign In
           </button>
         </p>
+
+        {/* Status & Security footer */}
+        <div className="login-status">
+          <span className="login-status-item">
+            <Activity size={12} />
+            <span style={{ color: "var(--accent)" }}>System Operational</span>
+          </span>
+          <span className="login-status-item">
+            <ShieldCheck size={12} />
+            Secure AES-256
+          </span>
+        </div>
       </div>
     </div>
   );

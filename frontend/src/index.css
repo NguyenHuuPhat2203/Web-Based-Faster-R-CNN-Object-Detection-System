@@ -1,12 +1,23 @@
 :root {
-    --primary: #6366f1;
-    --primary-hover: #4f46e5;
-    --bg: #0f172a;
-    --card-bg: #1e293b;
-    --text: #f8fafc;
+    --primary: #06b6d4;
+    --primary-hover: #0891b2;
+    --primary-subtle: rgba(6, 182, 212, 0.12);
+    --bg: #0a0f1a;
+    --card-bg: #111827;
+    --card-border: #1e293b;
+    --surface: #141b2d;
+    --text: #f1f5f9;
     --text-muted: #94a3b8;
+    --text-secondary: #64748b;
     --accent: #10b981;
+    --warning: #f59e0b;
+    --processing: #3b82f6;
     --error: #ef4444;
+    --sidebar-bg: #0d1321;
+    --sidebar-width: 240px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
 }
 
 * {
@@ -651,10 +662,6 @@ canvas {
 
 /* ── Dashboard Layout ──────────────────────────────────────────────── */
 
-:root {
-    --sidebar-width: 220px;
-}
-
 .dashboard-layout {
     display: flex;
     min-height: 100vh;
@@ -687,6 +694,37 @@ canvas {
 
 .sidebar.collapsed {
     width: 60px;
+}
+
+.sidebar.collapsed .sidebar-user {
+    justify-content: center;
+    padding: 1rem 0.5rem;
+}
+
+.sidebar.collapsed .sidebar-user-info {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-nav {
+    padding: 0.5rem 0.35rem;
+}
+
+.sidebar.collapsed .sidebar-item {
+    justify-content: center;
+    padding: 0.7rem;
+}
+
+.sidebar.collapsed .sidebar-item span {
+    display: none;
+}
+
+.sidebar.collapsed .status-footer {
+    justify-content: center;
+}
+
+.sidebar.collapsed .status-footer-left,
+.sidebar.collapsed .status-footer-right {
+    display: none;
 }
 
 .sidebar-header {
@@ -1166,5 +1204,591 @@ canvas {
     padding: 0.75rem 1rem;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* ═══════════════════════════════════════════════════
+   NeuroScan AI — Status Badges
+   ═══════════════════════════════════════════════════ */
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-badge.completed {
+    background: rgba(16, 185, 129, 0.12);
+    color: var(--accent);
+}
+
+.status-badge.detection {
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--warning);
+}
+
+.status-badge.processing {
+    background: rgba(59, 130, 246, 0.12);
+    color: var(--processing);
+}
+
+.status-badge.active {
+    background: rgba(6, 182, 212, 0.12);
+    color: var(--primary);
+}
+
+/* ═══════════════════════════════════════════════════
+   NeuroScan AI — User Avatar
+   ═══════════════════════════════════════════════════ */
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--card-border);
+    flex-shrink: 0;
+}
+
+.user-avatar-sm {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--card-border);
+    flex-shrink: 0;
+}
+
+.user-avatar-lg {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--card-border);
+    flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════
+   NeuroScan AI — Sidebar User Section
+   ═══════════════════════════════════════════════════ */
+
+.sidebar-user {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sidebar-user-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.sidebar-user-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-user-role {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar .sidebar-header {
+    border-bottom-color: rgba(255, 255, 255, 0.06);
+    padding: 0.85rem 1rem;
+}
+
+.sidebar .sidebar-brand {
+    font-size: 1rem;
+    line-height: 1.3;
+}
+
+.sidebar-brand-sub {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    font-weight: 400;
+    display: block;
+    margin-top: -1px;
+}
+
+/* ═══════════════════════════════════════════════════
+   NeuroScan AI — Status Footer
+   ═══════════════════════════════════════════════════ */
+
+.status-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.status-footer-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.status-footer-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+}
+
+.status-footer a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.15s;
+}
+
+.status-footer a:hover {
+    color: var(--text-muted);
+}
+
+.neural-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    background: rgba(6, 182, 212, 0.08);
+    color: var(--primary);
+    border: 1px solid rgba(6, 182, 212, 0.15);
+    white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════
+   NeuroScan AI — Scan Type Badges
+   ═══════════════════════════════════════════════════ */
+
+.scan-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.scan-badge.neuro-t1 {
+    background: rgba(6, 182, 212, 0.15);
+    color: var(--primary);
+}
+
+.scan-badge.neuro-t2 {
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+}
+
+.scan-badge.flair {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning);
+}
+
+.scan-badge.diffusion {
+    background: rgba(236, 72, 153, 0.15);
+    color: #f472b6;
+}
+
+.scan-badge.contrast {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════
+   NeuroScan AI — History List Layout
+   ═══════════════════════════════════════════════════ */
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.history-list-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    width: 100%;
+    text-align: left;
+}
+
+.history-list-item:hover {
+    border-color: rgba(6, 182, 212, 0.2);
+    background: rgba(6, 182, 212, 0.02);
+}
+
+.history-list-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--card-border);
+}
+
+.history-list-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.history-list-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-list-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.15rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.history-list-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+.history-list-actions .btn-tiny {
+    padding: 0.35rem;
+    line-height: 1;
+}
+
+/* ═══════════════════════════════════════════════════
+   NeuroScan AI — Detector Two-Column Layout
+   ═══════════════════════════════════════════════════ */
+
+.detector-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.detector-main {
+    min-width: 0;
+}
+
+.detector-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    position: sticky;
+    top: 2rem;
+}
+
+/* Detector metric card */
+.metric-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.metric-card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.metric-card-icon.green {
+    background: rgba(16, 185, 129, 0.12);
+    color: var(--accent);
+}
+
+.metric-card-icon.cyan {
+    background: rgba(6, 182, 212, 0.12);
+    color: var(--primary);
+}
+
+.metric-card-icon.amber {
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--warning);
+}
+
+.metric-card-icon.blue {
+    background: rgba(59, 130, 246, 0.12);
+    color: var(--processing);
+}
+
+.metric-card-body {
+    min-width: 0;
+}
+
+.metric-card-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.2;
+}
+
+.metric-card-label {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    margin-top: 0.1rem;
+}
+
+.metric-card-label-sub {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+/* Metadata card */
+.metadata-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+}
+
+.metadata-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.metadata-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.metadata-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.metadata-key {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.metadata-value {
+    font-size: 0.82rem;
+    color: var(--text);
+    font-weight: 500;
+}
+
+/* Control group for detector sidebar */
+.control-group {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+}
+
+.control-group-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+    gap: 0.5rem;
+}
+
+.control-row + .control-row {
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.control-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.control-value {
+    font-size: 0.82rem;
+    color: var(--text);
+    font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════
+   NeuroScan AI — Accuracy Chart (CSS-only)
+   ═══════════════════════════════════════════════════ */
+
+.chart-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+}
+
+.chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.chart-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.chart-subtitle {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+.chart-legend {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+.chart-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+}
+
+.chart-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    height: 120px;
+    padding-top: 1rem;
+}
+
+.chart-bar-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    height: 100%;
+    justify-content: flex-end;
+}
+
+.chart-bar {
+    width: 100%;
+    max-width: 40px;
+    border-radius: 4px 4px 0 0;
+    min-height: 8px;
+    transition: height 0.4s ease;
+    position: relative;
+}
+
+.chart-bar-value {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    text-align: center;
+}
+
+.chart-bar-label {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+/* Login status bar */
+.login-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.login-status-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.settings-card.danger-zone {
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.settings-card.danger-zone .settings-section-title {
+    color: var(--error);
+}
     color: var(--text-muted);
 }

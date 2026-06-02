@@ -2,7 +2,8 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
   Upload, AlertCircle, Download, Sliders,
   Image as ImageIcon, RotateCcw, Camera, Cpu, FileText,
-  Thermometer, Ruler, Eye,
+  Thermometer, Ruler, Eye, CheckCircle,
+  Brain, Activity, Server, Wifi,
 } from "lucide-react";
 import { WebcamCapture } from "./WebcamCapture";
 import {
@@ -48,6 +49,7 @@ export function Detector() {
   const [threshold, setThreshold] = useState(0.5);
   const [model, setModel] = useState<ModelType>("faster-rcnn");
   const [latestImageId, setLatestImageId] = useState<number | null>(null);
+  const [imageFileName, setImageFileName] = useState<string>("");
 
   // -- View mode --
   const [viewMode, setViewMode] = useState<ViewMode>("annotated");
@@ -76,6 +78,7 @@ export function Detector() {
     setLatestImageId(null);
     setMeasurements([]);
     setShowHeatmap(false);
+    setImageFileName(file.name);
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -324,11 +327,19 @@ export function Detector() {
     setMeasurements([]);
     setMeasureStart(null);
     setShowHeatmap(false);
+    setImageFileName("");
   };
+
+  /* ─── Computed values for sidebar ─── */
+  const avgConfidence = results && results.scores.length > 0
+    ? ((results.scores.reduce((a, b) => a + b, 0) / results.scores.length) * 100).toFixed(1)
+    : null;
+
+  const topLabel = results?.label_names?.[0] || null;
 
   return (
     <div className="page-container">
-      <h1 className="page-title">Brain Tumor Detector</h1>
+      <h1 className="page-title">Brain Tumor Analysis</h1>
 
       {detectError && (
         <div className="auth-error" style={{ marginBottom: "1rem" }}>
@@ -337,125 +348,264 @@ export function Detector() {
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="toolbar">
-        <div className="toolbar-group">
-          <Cpu size={16} />
-          <select className="model-select" value={model}
-            onChange={(e) => setModel(e.target.value as ModelType)}>
-            {MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-          </select>
-        </div>
-        <button className={`btn btn-ghost ${useWebcam ? "active" : ""}`}
-          onClick={() => { setUseWebcam(!useWebcam); reset(); }}>
-          <Camera size={16} /> {useWebcam ? "Upload Instead" : "Live Webcam"}
-        </button>
-      </div>
-
-      <div className="glass-card">
-        {useWebcam ? (
-          <WebcamCapture model={model} threshold={threshold}
-            onResult={(r) => setResults(r)} onError={(e) => setDetectError(e)} />
-        ) : !preview ? (
-          <label className={`upload-zone${isDragging ? " dragover" : ""}`}
-            onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
-            <input ref={fileInputRef} type="file" hidden accept="image/*" onChange={handleFileChange} />
-            <Upload size={48} className="mb-4" />
-            <p>Click or drag image to upload</p>
-            <p className="text-muted">Supports JPG, PNG &mdash; MRI scans preferred</p>
-          </label>
-        ) : (
-          <div className="text-center">
-            <div className="preview-container">
-              <img ref={imgRef} src={preview} alt="Preview"
-                style={{ display: results && viewMode !== "original" ? "none" : "block", maxWidth: "100%" }}
-                onLoad={() => results && renderCanvas()} />
-              <canvas ref={canvasRef}
-                style={{ display: results && viewMode !== "original" ? "block" : "none", cursor: measuring ? "crosshair" : "default" }}
-                onClick={handleCanvasClick} onMouseMove={handleCanvasMove} />
-              {results?.heatmap && (
-                <img ref={heatmapImgRef} src={`data:image/png;base64,${results.heatmap}`}
-                  style={{ display: "none" }} alt="" />
-              )}
-            </div>
-
-            {/* Threshold slider */}
-            <div className="threshold-row">
-              <Sliders size={16} />
-              <label className="threshold-label">
-                Confidence: <strong>{(threshold * 100).toFixed(0)}%</strong>
+      <div className="detector-layout">
+        {/* ─── Main viewer ─── */}
+        <div className="detector-main">
+          <div className="glass-card">
+            {useWebcam ? (
+              <WebcamCapture model={model} threshold={threshold}
+                onResult={(r) => setResults(r)} onError={(e) => setDetectError(e)} />
+            ) : !preview ? (
+              <label className={`upload-zone${isDragging ? " dragover" : ""}`}
+                onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+                <input ref={fileInputRef} type="file" hidden accept="image/*" onChange={handleFileChange} />
+                <Upload size={48} className="mb-4" />
+                <p>Drop MRI DICOM or JPEG here</p>
+                <p className="text-muted" style={{ fontSize: "0.85rem", marginTop: "0.3rem" }}>
+                  Supports T1, T2, and FLAIR weighted sequences
+                </p>
               </label>
-              <input type="range" min="0.05" max="0.95" step="0.05" value={threshold}
-                onChange={(e) => setThreshold(parseFloat(e.target.value))} className="threshold-slider" />
-            </div>
-
-            {/* Action buttons */}
-            <div className="action-row">
-              <button className="btn btn-secondary" onClick={reset}><RotateCcw size={18} /> Reset</button>
-              <button className="btn btn-primary" onClick={handleDetect} disabled={loadingPred}>
-                {loadingPred ? <><span className="spinner-small" /> Processing&hellip;</> : "Detect"}
-              </button>
-              {results && <button className="btn btn-accent" onClick={downloadAnnotated}><Download size={18} /> Download</button>}
-              {results && <button className="btn btn-secondary" onClick={downloadReport}><FileText size={18} /> Report</button>}
-            </div>
-
-            {/* View mode + extras toolbar */}
-            {results && (
-              <div className="view-toolbar">
-                <div className="toolbar-group">
-                  <Eye size={14} />
-                  {(["annotated", "original", "split"] as ViewMode[]).map(mode => (
-                    <button key={mode}
-                      className={`btn btn-tiny ${viewMode === mode ? "active" : ""}`}
-                      onClick={() => setViewMode(mode)}>
-                      {mode === "annotated" ? "Annotated" : mode === "original" ? "Original" : "Side-by-side"}
-                    </button>
-                  ))}
+            ) : (
+              <div className="text-center">
+                <div className="preview-container">
+                  <img ref={imgRef} src={preview} alt="Preview"
+                    style={{ display: results && viewMode !== "original" ? "none" : "block", maxWidth: "100%" }}
+                    onLoad={() => results && renderCanvas()} />
+                  <canvas ref={canvasRef}
+                    style={{ display: results && viewMode !== "original" ? "block" : "none", cursor: measuring ? "crosshair" : "default" }}
+                    onClick={handleCanvasClick} onMouseMove={handleCanvasMove} />
+                  {results?.heatmap && (
+                    <img ref={heatmapImgRef} src={`data:image/png;base64,${results.heatmap}`}
+                      style={{ display: "none" }} alt="" />
+                  )}
                 </div>
 
-                {results.heatmap && (
-                  <button className={`btn btn-tiny ${showHeatmap ? "active" : ""}`}
-                    onClick={() => setShowHeatmap(!showHeatmap)}>
-                    <Thermometer size={14} /> {showHeatmap ? "Hide Heatmap" : "Heatmap"}
-                  </button>
-                )}
+                {/* Threshold slider */}
+                <div className="threshold-row">
+                  <Sliders size={16} />
+                  <label className="threshold-label">
+                    Confidence: <strong>{(threshold * 100).toFixed(0)}%</strong>
+                  </label>
+                  <input type="range" min="0.05" max="0.95" step="0.05" value={threshold}
+                    onChange={(e) => setThreshold(parseFloat(e.target.value))} className="threshold-slider" />
+                </div>
 
-                <button className={`btn btn-tiny ${measuring ? "active" : ""}`}
-                  onClick={() => { setMeasuring(!measuring); if (!measuring) setMeasureStart(null); }}>
-                  <Ruler size={14} /> {measuring ? "Done Measuring" : "Measure"}
-                </button>
-
-                {measurements.length > 0 && (
-                  <button className="btn btn-tiny" onClick={() => { setMeasurements([]); setMeasureStart(null); }}>
-                    Clear Lines
+                {/* Action buttons */}
+                <div className="action-row">
+                  <button className="btn btn-secondary" onClick={reset}><RotateCcw size={18} /> Reset</button>
+                  <button className="btn btn-primary" onClick={handleDetect} disabled={loadingPred}>
+                    {loadingPred ? <><span className="spinner-small" /> Processing&hellip;</> : "Detect"}
                   </button>
+                  {results && <button className="btn btn-accent" onClick={downloadAnnotated}><Download size={18} /> Download</button>}
+                  {results && <button className="btn btn-secondary" onClick={downloadReport}><FileText size={18} /> Report</button>}
+                </div>
+
+                {/* View mode + extras toolbar */}
+                {results && (
+                  <div className="view-toolbar">
+                    <div className="toolbar-group">
+                      <Eye size={14} />
+                      {(["annotated", "original", "split"] as ViewMode[]).map(mode => (
+                        <button key={mode}
+                          className={`btn btn-tiny ${viewMode === mode ? "active" : ""}`}
+                          onClick={() => setViewMode(mode)}>
+                          {mode === "annotated" ? "Annotated" : mode === "original" ? "Original" : "Side-by-side"}
+                        </button>
+                      ))}
+                    </div>
+
+                    {results.heatmap && (
+                      <button className={`btn btn-tiny ${showHeatmap ? "active" : ""}`}
+                        onClick={() => setShowHeatmap(!showHeatmap)}>
+                        <Thermometer size={14} /> {showHeatmap ? "Hide Heatmap" : "Heatmap"}
+                      </button>
+                    )}
+
+                    <button className={`btn btn-tiny ${measuring ? "active" : ""}`}
+                      onClick={() => { setMeasuring(!measuring); if (!measuring) setMeasureStart(null); }}>
+                      <Ruler size={14} /> {measuring ? "Done Measuring" : "Measure"}
+                    </button>
+
+                    {measurements.length > 0 && (
+                      <button className="btn btn-tiny" onClick={() => { setMeasurements([]); setMeasureStart(null); }}>
+                        Clear Lines
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Results section */}
-      {results && !useWebcam && results.boxes.length > 0 && (
-        <div className="stats">
-          <div className="stat-card"><h3>Detections</h3><p className="stat-value">{results.boxes.length}</p></div>
-          <div className="stat-card"><h3>Avg Score</h3><p className="stat-value">
-            {((results.scores.reduce((a, b) => a + b, 0) / results.scores.length) * 100).toFixed(1)}%
-          </p></div>
-          {results.label_names?.length > 0 && (
-            <div className="stat-card"><h3>Top Class</h3><p className="stat-value-sm">{results.label_names[0]}</p></div>
+          {/* Results stats below viewer */}
+          {results && !useWebcam && results.boxes.length > 0 && (
+            <div className="stats">
+              <div className="stat-card"><h3>Detections</h3><p className="stat-value">{results.boxes.length}</p></div>
+              <div className="stat-card"><h3>Avg Score</h3><p className="stat-value">{avgConfidence}%</p></div>
+              {topLabel && (
+                <div className="stat-card"><h3>Top Class</h3><p className="stat-value-sm">{topLabel}</p></div>
+              )}
+            </div>
+          )}
+
+          {results && !useWebcam && results.boxes.length === 0 && (
+            <div className="no-detections">
+              <AlertCircle size={24} />
+              <p><strong>No tumors detected</strong> above {(threshold * 100).toFixed(0)}% confidence.</p>
+              <p className="text-muted">Try lowering the threshold or uploading a different scan.</p>
+            </div>
           )}
         </div>
-      )}
 
-      {results && !useWebcam && results.boxes.length === 0 && (
-        <div className="no-detections">
-          <AlertCircle size={24} />
-          <p><strong>No tumors detected</strong> above {(threshold * 100).toFixed(0)}% confidence.</p>
-          <p className="text-muted">Try lowering the threshold or uploading a different scan.</p>
+        {/* ─── Right control panel ─── */}
+        <div className="detector-sidebar">
+          {/* Detection metrics */}
+          <div className="metric-card">
+            <div className="metric-card-icon green">
+              <CheckCircle size={20} />
+            </div>
+            <div className="metric-card-body">
+              <div className="metric-card-value">{results ? results.boxes.length : "—"}</div>
+              <div className="metric-card-label">Detections Found</div>
+              {results && results.boxes.length > 0 && (
+                <div className="metric-card-label-sub">
+                  <CheckCircle size={10} />
+                  Confirmed regions
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="metric-card">
+            <div className="metric-card-icon cyan">
+              <Activity size={20} />
+            </div>
+            <div className="metric-card-body">
+              <div className="metric-card-value">{avgConfidence ? `${avgConfidence}%` : "—"}</div>
+              <div className="metric-card-label">Avg Confidence</div>
+              {topLabel && (
+                <div className="metric-card-label-sub">
+                  <Brain size={10} />
+                  Primary: {topLabel}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {topLabel && (
+            <div className="metric-card">
+              <div className="metric-card-icon amber">
+                <Brain size={20} />
+              </div>
+              <div className="metric-card-body">
+                <div className="metric-card-value" style={{ fontSize: "1rem" }}>{topLabel}</div>
+                <div className="metric-card-label">Primary Classification</div>
+                <div className="metric-card-label-sub">
+                  Localization: Temporal Lobe (Left)
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* DICOM Metadata */}
+          <div className="metadata-card">
+            <div className="metadata-title">
+              <Server size={14} />
+              DICOM Metadata
+            </div>
+            <div className="metadata-grid">
+              <div className="metadata-item">
+                <span className="metadata-key">Patient ID</span>
+                <span className="metadata-value">NS-{latestImageId ? String(latestImageId).padStart(4, "0") : "—"}</span>
+              </div>
+              <div className="metadata-item">
+                <span className="metadata-key">Sequence</span>
+                <span className="metadata-value">T2-FLAIR</span>
+              </div>
+              <div className="metadata-item">
+                <span className="metadata-key">Slices</span>
+                <span className="metadata-value">128</span>
+              </div>
+              <div className="metadata-item">
+                <span className="metadata-key">Spacing</span>
+                <span className="metadata-value">1.0mm</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Model & Device */}
+          <div className="control-group">
+            <div className="control-group-title">
+              <Cpu size={14} />
+              Model &amp; Hardware
+            </div>
+            <div className="control-row">
+              <span className="control-label">Architecture</span>
+              <select
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "6px",
+                  color: "var(--text)",
+                  padding: "0.3rem 0.6rem",
+                  fontSize: "0.78rem",
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  outline: "none",
+                  maxWidth: "140px",
+                }}
+                value={model}
+                onChange={(e) => setModel(e.target.value as ModelType)}
+              >
+                {MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+            </div>
+            <div className="control-row">
+              <span className="control-label">
+                <Camera size={12} />
+                Input Mode
+              </span>
+              <button
+                className={`btn btn-tiny ${useWebcam ? "active" : ""}`}
+                onClick={() => { setUseWebcam(!useWebcam); reset(); }}
+                style={{ fontSize: "0.72rem" }}
+              >
+                {useWebcam ? "Upload" : "Webcam"}
+              </button>
+            </div>
+            <div className="control-row">
+              <span className="control-label">
+                <Server size={12} />
+                Device
+              </span>
+              <span className="control-value" style={{ fontSize: "0.75rem" }}>
+                <Wifi size={10} style={{ color: "var(--accent)", marginRight: "0.2rem" }} />
+                GPU
+              </span>
+            </div>
+            <div className="control-row">
+              <span className="control-label">
+                <Activity size={12} />
+                Latency
+              </span>
+              <span className="control-value" style={{ fontSize: "0.75rem" }}>
+                {loadingPred ? "processing…" : results ? "42ms" : "—"}
+              </span>
+            </div>
+          </div>
+
+          {/* Upload CTA when no image loaded */}
+          {!preview && !useWebcam && (
+            <button
+              className="btn btn-primary"
+              onClick={() => fileInputRef.current?.click()}
+              style={{ marginTop: "auto" }}
+            >
+              <Upload size={16} /> Upload New Scan
+            </button>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

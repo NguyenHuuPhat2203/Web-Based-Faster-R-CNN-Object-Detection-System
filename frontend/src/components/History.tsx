@@ -6,6 +6,9 @@ import {
   Trash2,
   FileText,
   Search,
+  Filter,
+  ArrowUpDown,
+  Upload,
 } from "lucide-react";
 import {
   listImages,
@@ -21,6 +24,24 @@ import type { DashboardPage } from "./Sidebar";
 interface HistoryProps {
   onNavigate: (page: DashboardPage) => void;
   onViewImage: (imageId: number, results: PredictionResult | null) => void;
+}
+
+/* ─── Scan type distribution for badges ─── */
+const SCAN_TYPES = [
+  { pattern: "t1", badge: "neuro-t1", label: "NEURO_T1" },
+  { pattern: "t2", badge: "neuro-t2", label: "NEURO_T2" },
+  { pattern: "flair", badge: "flair", label: "FLAIR" },
+  { pattern: "diff", badge: "diffusion", label: "DIFFUSION" },
+  { pattern: "contrast", badge: "contrast", label: "CONTRAST" },
+] as const;
+
+function getScanBadge(filename: string): { badge: string; label: string } | null {
+  const lower = filename.toLowerCase();
+  for (const st of SCAN_TYPES) {
+    if (lower.includes(st.pattern)) return { badge: st.badge, label: st.label };
+  }
+  // Default based on id hash
+  return null;
 }
 
 export function History({ onNavigate, onViewImage }: HistoryProps) {
@@ -42,22 +63,20 @@ export function History({ onNavigate, onViewImage }: HistoryProps) {
 
   useEffect(() => { fetchImages(); }, []);
 
-  // Fetch thumbnails via authFetch (img tags can't send auth headers)
+  // Fetch thumbnails via authFetch
   useEffect(() => {
     if (images.length === 0) return;
-    const pending = new Map<number, Promise<void>>();
-
     for (const img of images) {
       if (thumbnails[img.id]) continue;
-      pending.set(img.id, (async () => {
-        try {
-          const res = await authFetch(`/images/${img.id}`);
-          if (!res.ok) return;
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          setThumbnails((prev) => ({ ...prev, [img.id]: url }));
-        } catch { /* thumbnail silently fails */ }
-      })());
+      authFetch(`/images/${img.id}`)
+        .then((r) => (r.ok ? r.blob() : null))
+        .then((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            setThumbnails((prev) => ({ ...prev, [img.id]: url }));
+          }
+        })
+        .catch(() => {});
     }
   }, [images]);
 
@@ -93,17 +112,30 @@ export function History({ onNavigate, onViewImage }: HistoryProps) {
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1 className="page-title">Scan History</h1>
+        <div>
+          <h1 className="page-title" style={{ marginBottom: "0.25rem" }}>Scan History</h1>
+          <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+            Review and manage clinical diagnostic records.
+          </p>
+        </div>
         {!loading && images.length > 0 && (
-          <div className="search-bar">
-            <Search size={16} />
-            <input
-              type="text"
-              placeholder="Search by filename&hellip;"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="search-input"
-            />
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <div className="search-bar">
+              <Search size={16} />
+              <input
+                type="text"
+                placeholder="Search by filename..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="search-input"
+              />
+            </div>
+            <button className="btn btn-ghost" style={{ width: "auto", padding: "0.5rem 0.75rem" }} title="Filter">
+              <Filter size={16} />
+            </button>
+            <button className="btn btn-ghost" style={{ width: "auto", padding: "0.5rem 0.75rem" }} title="Sort">
+              <ArrowUpDown size={16} />
+            </button>
           </div>
         )}
       </div>
@@ -112,7 +144,7 @@ export function History({ onNavigate, onViewImage }: HistoryProps) {
         <div className="auth-error" style={{ marginBottom: "1rem" }}>
           <AlertCircle size={18} />
           <span>{error}</span>
-          <button className="btn btn-ghost" onClick={fetchImages} style={{ marginLeft: "auto" }}>
+          <button className="btn btn-ghost" onClick={fetchImages} style={{ marginLeft: "auto", width: "auto", padding: "0.3rem 0.8rem" }}>
             Retry
           </button>
         </div>
@@ -131,38 +163,61 @@ export function History({ onNavigate, onViewImage }: HistoryProps) {
           <p>{search ? "No images match your search." : "No scans yet. Upload an MRI to get started."}</p>
           {!search && (
             <button className="btn btn-primary" onClick={() => onNavigate("detector")}>
-              Upload Your First Scan
+              <Upload size={16} /> Upload Your First Scan
             </button>
           )}
         </div>
       )}
 
       {!loading && !error && filtered.length > 0 && (
-        <div className="history-grid">
-          {filtered.map((img) => (
-            <div key={img.id} className="history-card"
-              onClick={() => onViewImage(img.id, img.detections.length > 0 ? detectionsToPredictionResult(img.detections) : null)}>
-              <div className="history-card-img">
-                <img src={thumbnails[img.id] || getImageUrl(img.id)} alt={img.original_name} loading="lazy" />
+        <div className="history-list">
+          {filtered.map((img) => {
+            const scanBadge = getScanBadge(img.original_name);
+            return (
+              <div
+                key={img.id}
+                className="history-list-item"
+                onClick={() => onViewImage(img.id, img.detections.length > 0 ? detectionsToPredictionResult(img.detections) : null)}
+              >
+                <img
+                  src={thumbnails[img.id] || getImageUrl(img.id)}
+                  alt={img.original_name}
+                  className="history-list-thumb"
+                  loading="lazy"
+                />
+                <div className="history-list-body">
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span className="history-list-name">{img.original_name}</span>
+                    {scanBadge && (
+                      <span className={`scan-badge ${scanBadge.badge}`}>{scanBadge.label}</span>
+                    )}
+                  </div>
+                  <div className="history-list-meta">
+                    <span>{new Date(img.uploaded_at).toLocaleDateString()}</span>
+                    <span style={{ color: "var(--text-secondary)" }}>•</span>
+                    <span>{img.detections.length} detections</span>
+                  </div>
+                </div>
+                <div className="history-list-actions">
+                  <button
+                    className="btn btn-tiny"
+                    onClick={(e) => { e.stopPropagation(); handleDownloadReport(img.id); }}
+                    title="Download Report"
+                  >
+                    <FileText size={14} />
+                  </button>
+                  <button
+                    className="btn btn-tiny btn-danger"
+                    onClick={(e) => { e.stopPropagation(); handleDelete(img.id); }}
+                    disabled={deletingId === img.id}
+                    title="Delete"
+                  >
+                    {deletingId === img.id ? <span className="spinner-small" /> : <Trash2 size={14} />}
+                  </button>
+                </div>
               </div>
-              <div className="history-card-body">
-                <p className="history-name" title={img.original_name}>{img.original_name}</p>
-                <p className="history-meta">{new Date(img.uploaded_at).toLocaleDateString()}</p>
-              </div>
-              <div className="history-card-actions">
-                <button className="btn btn-tiny" onClick={(e) => { e.stopPropagation(); handleDownloadReport(img.id); }}
-                  title="Download Report">
-                  <FileText size={14} />
-                </button>
-                <button className="btn btn-tiny btn-danger"
-                  onClick={(e) => { e.stopPropagation(); handleDelete(img.id); }}
-                  disabled={deletingId === img.id}
-                  title="Delete">
-                  {deletingId === img.id ? <span className="spinner-small" /> : <Trash2 size={14} />}
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
