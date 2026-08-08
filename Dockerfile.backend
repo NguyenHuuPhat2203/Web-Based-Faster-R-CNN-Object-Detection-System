@@ -11,10 +11,9 @@ COPY backend/requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r requirements.txt
 
-# Download model checkpoint from Hugging Face Hub
-RUN python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='LuxeFats/FasterRCNN-Checkpoint', filename='model.pth', local_dir='/checkpoints')" 2>/dev/null || echo "Checkpoint download skipped (will download at runtime)"
-
 # ── Runtime stage ─────────────────────────────────────────────────
+# Thin image: no baked model weights. Mount ./registry and ./checkpoints at runtime.
+# Tree mirrors the host: /app/backend + /app/ml with PYTHONPATH=/app.
 FROM python:3.12-slim AS runtime
 
 # Runtime system deps only (no build tools)
@@ -27,29 +26,34 @@ RUN groupadd -r app && useradd -r -g app -d /app -s /sbin/nologin app
 
 WORKDIR /app
 
-# Copy installed packages from builder (avoids leavinig pip/buld deps)
+# Copy installed packages from builder (avoids leaving pip/build deps)
 COPY --from=builder /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
-# Application code — exclude tests
-COPY backend/ /app/
-RUN rm -rf /app/tests/
+# Host-like layout (cwd-equivalent via PYTHONPATH=/app)
+COPY backend/ /app/backend/
+COPY ml/ /app/ml/
+RUN rm -rf /app/backend/tests/ \
+    && test -f /app/ml/__init__.py \
+    && test -f /app/backend/main.py \
+    && PYTHONPATH=/app python -c "import ml; import backend.main"
 
-# Copy pre-downloaded checkpoint from builder (if any)
-COPY --from=builder /checkpoints/ /checkpoints/ 2>/dev/null || true
-
-# Ensure checkpoints directory exists
-RUN mkdir -p /checkpoints
+# Empty mount points for host volumes (weights are not baked into the image)
+RUN mkdir -p /checkpoints /registry \
+    && chown -R app:app /checkpoints /registry /app
 
 # Production settings
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    CHECKPOINT_DIR=/checkpoints \
+    REGISTRY_DIR=/registry
 
 EXPOSE 8000
 
 USER app
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')" || exit 1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic -c /app/backend/alembic.ini upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]

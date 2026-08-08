@@ -7,11 +7,28 @@ services:
       - "8000:8000"
     volumes:
       - uploads:/app/uploads
+      - db:/app/db
+      - ./registry:/registry:ro
+      - ./checkpoints:/checkpoints:ro
     env_file:
       - backend/.env
     environment:
-      - DATABASE_URL=sqlite:///./brain_tumor.db
+      - DATABASE_URL=sqlite:////app/db/brain_tumor.db
       - UPLOAD_DIR=uploads
+      - CHECKPOINT_DIR=/checkpoints
+      - REGISTRY_DIR=/registry
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   frontend:
@@ -20,11 +37,14 @@ services:
       dockerfile: Dockerfile.frontend
       args:
         VITE_API_URL: http://localhost:8000
+        VITE_API_VERSION: v2
     ports:
       - "8001:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   uploads:
+  db:
