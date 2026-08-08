@@ -38,7 +38,7 @@ module = ["ml.core.*", "backend.schemas.*"]
 strict = true
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests"]
+testpaths = ["backend/tests", "training/tests"]
 markers = [
     "overfit: single-batch overfit sanity test",
     "edge: edge-case inference tests",
