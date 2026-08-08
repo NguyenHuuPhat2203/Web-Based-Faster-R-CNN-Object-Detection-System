@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   Scan,
@@ -13,22 +14,15 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
-export type DashboardPage = "home" | "detector" | "history" | "settings";
-
-interface SidebarProps {
-  activePage: DashboardPage;
-  onNavigate: (page: DashboardPage) => void;
-}
-
-export function Sidebar({ activePage, onNavigate }: SidebarProps) {
+export function Sidebar() {
   const { logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
-  const items: { page: DashboardPage; label: string; icon: React.ReactNode }[] = [
-    { page: "home", label: "Dashboard", icon: <LayoutDashboard size={19} /> },
-    { page: "detector", label: "Detector", icon: <Scan size={19} /> },
-    { page: "history", label: "History", icon: <Clock size={19} /> },
-    { page: "settings", label: "Settings", icon: <Settings size={19} /> },
+  const items: { to: string; end?: boolean; label: string; icon: React.ReactNode }[] = [
+    { to: "/", end: true, label: "Dashboard", icon: <LayoutDashboard size={19} /> },
+    { to: "/detector", label: "Detector", icon: <Scan size={19} /> },
+    { to: "/history", label: "History", icon: <Clock size={19} /> },
+    { to: "/settings", label: "Settings", icon: <Settings size={19} /> },
   ];
 
   const initials = "D"; // Dr. Smith
@@ -75,15 +69,16 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="sidebar-nav">
-        {items.map(({ page, label, icon }) => (
-          <button
-            key={page}
-            className={`sidebar-item${activePage === page ? " active" : ""}`}
-            onClick={() => onNavigate(page)}
+        {items.map(({ to, end, label, icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            className={({ isActive }) => `sidebar-item${isActive ? " active" : ""}`}
           >
             {icon}
             {!collapsed && <span>{label}</span>}
-          </button>
+          </NavLink>
         ))}
       </nav>
 

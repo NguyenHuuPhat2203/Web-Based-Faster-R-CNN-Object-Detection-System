@@ -3,6 +3,8 @@ import { X, Download, FileText, AlertCircle } from "lucide-react";
 import {
   authFetch,
   getReportUrl,
+  listImages,
+  detectionsToPredictionResult,
   type PredictionResult,
 } from "../lib/api";
 
@@ -16,8 +18,32 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [fallbackResults, setFallbackResults] = useState<PredictionResult | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
+
+  // When opened via URL (deep link / refresh) no in-memory results exist;
+  // fall back to the detections persisted on the backend.
+  useEffect(() => {
+    if (results) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const images = await listImages();
+        const img = images.find((i) => i.id === imageId);
+        if (!cancelled && img) {
+          setFallbackResults(detectionsToPredictionResult(img.detections));
+        }
+      } catch {
+        // Annotations are optional; the raw image still renders.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [imageId, results]);
+
+  const effectiveResults = results ?? fallbackResults;
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +65,7 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
 
   // Draw annotations once the image loads
   useEffect(() => {
-    if (!results || !canvasRef.current || !imgRef.current) return;
+    if (!effectiveResults || !canvasRef.current || !imgRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     const img = imgRef.current;
@@ -50,15 +76,15 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
       canvas.height = img.naturalHeight;
       ctx.drawImage(img, 0, 0);
 
-      if (!results.boxes.length) return;
+      if (!effectiveResults.boxes.length) return;
 
       ctx.lineWidth = 4;
       ctx.font = "bold 22px Inter, system-ui, sans-serif";
 
-      results.boxes.forEach((box, i) => {
+      effectiveResults.boxes.forEach((box, i) => {
         const [xmin, ymin, xmax, ymax] = box;
-        const score = results.scores[i];
-        const label = results.label_names?.[i] || `Class ${results.labels[i]}`;
+        const score = effectiveResults.scores[i];
+        const label = effectiveResults.label_names?.[i] || `Class ${effectiveResults.labels[i]}`;
 
         ctx.strokeStyle = "#10b981";
         ctx.strokeRect(xmin, ymin, xmax - xmin, ymax - ymin);
@@ -78,7 +104,7 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
     } else {
       img.onload = onLoad;
     }
-  }, [results, blobUrl]);
+  }, [effectiveResults, blobUrl]);
 
   const handleDownloadReport = async () => {
     const url = getReportUrl(imageId);
@@ -150,11 +176,11 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
         </div>
 
         {/* Detection summary */}
-        {results && results.boxes.length > 0 && (
+        {effectiveResults && effectiveResults.boxes.length > 0 && (
           <div className="viewer-summary">
-            <p><strong>{results.boxes.length}</strong> detection{results.boxes.length !== 1 ? "s" : ""}</p>
-            {results.label_names?.length > 0 && (
-              <p>Top class: <strong>{results.label_names[0]}</strong></p>
+            <p><strong>{effectiveResults.boxes.length}</strong> detection{effectiveResults.boxes.length !== 1 ? "s" : ""}</p>
+            {effectiveResults.label_names?.length > 0 && (
+              <p>Top class: <strong>{effectiveResults.label_names[0]}</strong></p>
             )}
           </div>
         )}

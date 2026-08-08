@@ -1,13 +1,11 @@
 import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { UserPlus, Mail, Lock, User, AlertCircle, ShieldCheck, Activity } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
-interface RegisterProps {
-  onSwitchToLogin: () => void;
-}
-
-export function Register({ onSwitchToLogin }: RegisterProps) {
+export function Register() {
   const { register } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -27,6 +25,7 @@ export function Register({ onSwitchToLogin }: RegisterProps) {
     setSubmitting(true);
     try {
       await register(email, username, password);
+      navigate("/", { replace: true });
     } catch (err: any) {
       setError(err.message || "Registration failed");
     } finally {
@@ -109,9 +108,9 @@ export function Register({ onSwitchToLogin }: RegisterProps) {
 
         <p className="auth-switch">
           Already have an account?{" "}
-          <button className="link-btn" onClick={onSwitchToLogin}>
+          <Link className="link-btn" to="/login">
             Sign In
-          </button>
+          </Link>
         </p>
 
         {/* Status & Security footer */}

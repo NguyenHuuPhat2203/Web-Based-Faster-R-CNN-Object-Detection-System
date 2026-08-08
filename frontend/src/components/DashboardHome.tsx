@@ -10,6 +10,7 @@ import {
   CheckCircle,
   Clock,
 } from "lucide-react";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import {
   authFetch,
   fetchUserStats,
@@ -20,12 +21,7 @@ import {
   type ImageInfo,
   type PredictionResult,
 } from "../lib/api";
-import type { DashboardPage } from "./Sidebar";
-
-interface DashboardHomeProps {
-  onNavigate: (page: DashboardPage) => void;
-  onViewImage: (imageId: number, results: PredictionResult | null) => void;
-}
+import type { LayoutOutletContext } from "./DashboardLayout";
 
 /* ─── Chart data ─── */
 const MONTHLY_ACCURACY = [
@@ -37,7 +33,9 @@ const MONTHLY_ACCURACY = [
   { month: "Jun", value: 99.2 },
 ];
 
-export function DashboardHome({ onNavigate, onViewImage }: DashboardHomeProps) {
+export function DashboardHome() {
+  const navigate = useNavigate();
+  const { onViewImage } = useOutletContext<LayoutOutletContext>();
   const [stats, setStats] = useState<UserStats | null>(null);
   const [recentImages, setRecentImages] = useState<ImageInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,7 +141,7 @@ export function DashboardHome({ onNavigate, onViewImage }: DashboardHomeProps) {
         <div className="section" style={{ marginBottom: 0 }}>
           <h2 className="section-title">Quick Actions</h2>
           <div className="quick-actions">
-            <button className="action-card" onClick={() => onNavigate("detector")}>
+            <button className="action-card" onClick={() => navigate("/detector")}>
               <Scan size={28} />
               <span>Upload New Scan</span>
               <p className="text-muted" style={{ fontSize: "0.78rem", marginTop: "0.25rem" }}>
@@ -194,7 +192,7 @@ export function DashboardHome({ onNavigate, onViewImage }: DashboardHomeProps) {
       <div className="section">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
           <h2 className="section-title" style={{ marginBottom: 0 }}>Recent Activity</h2>
-          <button className="btn btn-ghost" style={{ width: "auto", padding: "0.35rem 0.8rem", fontSize: "0.8rem" }} onClick={() => onNavigate("history")}>
+          <button className="btn btn-ghost" style={{ width: "auto", padding: "0.35rem 0.8rem", fontSize: "0.8rem" }} onClick={() => navigate("/history")}>
             View All <ArrowRight size={14} />
           </button>
         </div>

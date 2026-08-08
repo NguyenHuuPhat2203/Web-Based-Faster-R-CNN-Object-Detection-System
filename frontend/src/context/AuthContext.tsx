@@ -54,6 +54,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Session died mid-request (refresh failed in authFetch) → force logout state
+  // so RequireAuth redirects to /login.
+  useEffect(() => {
+    const onExpired = () => setState({ isAuth: false, loading: false });
+    window.addEventListener("auth:expired", onExpired);
+    return () => window.removeEventListener("auth:expired", onExpired);
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     await apiLogin(email, password);
     setState({ isAuth: true, loading: false });

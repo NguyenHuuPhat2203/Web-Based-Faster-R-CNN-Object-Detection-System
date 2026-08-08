@@ -80,6 +80,11 @@ export async function authFetch(
     if (ok) {
       headers["Authorization"] = `Bearer ${getAccessToken()}`;
       res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    } else {
+      // Refresh failed → session is dead: clear tokens and let the auth gate
+      // redirect to /login (RequireAuth picks this up via the event).
+      clearTokens();
+      window.dispatchEvent(new Event("auth:expired"));
     }
   }
 

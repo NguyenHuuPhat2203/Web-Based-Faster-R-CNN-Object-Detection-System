@@ -10,6 +10,7 @@ import {
   ArrowUpDown,
   Upload,
 } from "lucide-react";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import {
   listImages,
   getImageUrl,
@@ -17,14 +18,8 @@ import {
   authFetch,
   detectionsToPredictionResult,
   type ImageInfo,
-  type PredictionResult,
 } from "../lib/api";
-import type { DashboardPage } from "./Sidebar";
-
-interface HistoryProps {
-  onNavigate: (page: DashboardPage) => void;
-  onViewImage: (imageId: number, results: PredictionResult | null) => void;
-}
+import type { LayoutOutletContext } from "./DashboardLayout";
 
 /* ─── Scan type distribution for badges ─── */
 const SCAN_TYPES = [
@@ -44,7 +39,9 @@ function getScanBadge(filename: string): { badge: string; label: string } | null
   return null;
 }
 
-export function History({ onNavigate, onViewImage }: HistoryProps) {
+export function History() {
+  const navigate = useNavigate();
+  const { onViewImage } = useOutletContext<LayoutOutletContext>();
   const [images, setImages] = useState<ImageInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -162,7 +159,7 @@ export function History({ onNavigate, onViewImage }: HistoryProps) {
           <ImageIcon size={48} />
           <p>{search ? "No images match your search." : "No scans yet. Upload an MRI to get started."}</p>
           {!search && (
-            <button className="btn btn-primary" onClick={() => onNavigate("detector")}>
+            <button className="btn btn-primary" onClick={() => navigate("/detector")}>
               <Upload size={16} /> Upload Your First Scan
             </button>
           )}

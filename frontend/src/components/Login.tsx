@@ -1,14 +1,14 @@
 import React, { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LogIn, Mail, Lock, AlertCircle, ShieldCheck, Activity } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getGoogleAuthUrl } from "../lib/api";
 
-interface LoginProps {
-  onSwitchToRegister: () => void;
-}
-
-export function Login({ onSwitchToRegister }: LoginProps) {
+export function Login() {
   const { login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from || "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,6 +20,7 @@ export function Login({ onSwitchToRegister }: LoginProps) {
     setSubmitting(true);
     try {
       await login(email, password);
+      navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.message || "Login failed");
     } finally {
@@ -113,9 +114,9 @@ export function Login({ onSwitchToRegister }: LoginProps) {
 
         <p className="auth-switch">
           Don't have an account?{" "}
-          <button className="link-btn" onClick={onSwitchToRegister}>
+          <Link className="link-btn" to="/register">
             Register
-          </button>
+          </Link>
         </p>
 
         {/* Status & Security footer */}
