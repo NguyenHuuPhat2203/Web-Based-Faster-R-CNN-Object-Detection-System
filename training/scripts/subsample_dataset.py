@@ -104,7 +104,7 @@ def subsample_dataset(
     _copy_pairs(src_split=source / "valid", dest_split=dest / "valid", stems=val_pick)
     _write_yaml(dest / "brain-tumor.yaml")
     print(
-        f"Smoke dataset → {dest} "
+        f"Smoke dataset -> {dest} "
         f"(train={len(train_pick)}, valid={len(val_pick)}, seed={seed})"
     )
     return dest

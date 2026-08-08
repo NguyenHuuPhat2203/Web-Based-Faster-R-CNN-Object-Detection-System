@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
             registry_root=args.registry_root,
         )
 
-    print(f"Promoted {args.model} → {out}")
+    print(f"Promoted {args.model} -> {out}")
     return 0
 
 

@@ -207,7 +207,7 @@ def download_and_normalize(
             dest_labels=dest / "valid" / "labels",
         )
         _write_yaml(dest / "brain-tumor.yaml")
-        print(f"Normalized dataset → {dest} (train={n_train}, valid={n_val})")
+        print(f"Normalized dataset -> {dest} (train={n_train}, valid={n_val})")
     finally:
         if work.exists():
             shutil.rmtree(work, ignore_errors=True)
