@@ -3,16 +3,18 @@
 Revision ID: 002
 Revises: 001
 """
+
 import json
-from typing import Union, Sequence
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy import text
 
 revision: str = "002"
-down_revision: Union[str, None] = "001"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "001"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -26,7 +28,8 @@ def upgrade() -> None:
     op.add_column("images", sa.Column("threshold", sa.Float(), nullable=True))
 
     # Create detections table
-    op.create_table("detections",
+    op.create_table(
+        "detections",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("image_id", sa.Integer(), nullable=False),
         sa.Column("label", sa.Integer(), nullable=False),
@@ -45,13 +48,17 @@ def upgrade() -> None:
     # Migrate existing JSON data from detection_result to detections rows
     conn = op.get_bind()
     rows = conn.execute(
-        text("SELECT id, detection_result FROM images WHERE detection_result IS NOT NULL")
+        text(
+            "SELECT id, detection_result FROM images WHERE detection_result IS NOT NULL"
+        )
     ).fetchall()
 
     for row in rows:
         img_id, result_json = row
         try:
-            result = json.loads(result_json) if isinstance(result_json, str) else result_json
+            result = (
+                json.loads(result_json) if isinstance(result_json, str) else result_json
+            )
         except (json.JSONDecodeError, TypeError):
             continue
 
@@ -73,8 +80,10 @@ def upgrade() -> None:
                     "label": label_id,
                     "label_name": label_name,
                     "score": score,
-                    "x1": box[0], "y1": box[1],
-                    "x2": box[2], "y2": box[3],
+                    "x1": box[0],
+                    "y1": box[1],
+                    "x2": box[2],
+                    "y2": box[3],
                 },
             )
 

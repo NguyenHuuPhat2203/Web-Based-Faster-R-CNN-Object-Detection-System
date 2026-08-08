@@ -20,10 +20,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY backend/requirements.txt ./
-RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
+COPY backend/requirements.txt ./backend-requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r backend-requirements.txt
 
-COPY backend/ /app/
+COPY backend/ /app/backend/
+COPY ml/ /app/ml/
+ENV PYTHONPATH=/app
 
 # Download model checkpoint from Hugging Face Hub at build time
 RUN python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='LuxeFats/FasterRCNN-Checkpoint', filename='model.pth', local_dir='/checkpoints')" 2>/dev/null || echo "Checkpoint download skipped (will download at runtime)"
@@ -38,10 +40,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy backend
+# Copy backend deps + host-like package layout
 COPY --from=backend-build /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
 COPY --from=backend-build /usr/local/bin/ /usr/local/bin/
-COPY backend/ /app/
+COPY backend/ /app/backend/
+COPY ml/ /app/ml/
 
 # Copy pre-downloaded checkpoint from builder (if any)
 COPY --from=backend-build /checkpoints/ /checkpoints/
@@ -102,8 +105,9 @@ stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 
 [program:uvicorn]
-command=uvicorn main:app --host 0.0.0.0 --port 8000
+command=uvicorn backend.main:app --host 0.0.0.0 --port 8000
 directory=/app
+environment=PYTHONPATH="/app"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -130,7 +134,8 @@ CRON
 RUN chmod 0644 /etc/cron.d/healthz
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
 
 EXPOSE 7860
 
@@ -138,7 +143,7 @@ RUN printf '%s\n' \
     '#!/bin/sh' \
     'set -eu' \
     '' \
-    'alembic -c /app/alembic.ini upgrade head' \
+    'alembic -c /app/backend/alembic.ini upgrade head' \
     'exec supervisord -c /etc/supervisor/supervisord.conf -n' \
     > /usr/local/bin/start.sh && chmod +x /usr/local/bin/start.sh
 

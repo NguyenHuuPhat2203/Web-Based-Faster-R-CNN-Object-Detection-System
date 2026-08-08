@@ -4,18 +4,21 @@ Revision ID: 001
 Revises:
 Create Date: 2026-06-01
 """
-from typing import Union, Sequence
-from alembic import op
+
+from collections.abc import Sequence
+
 import sqlalchemy as sa
+from alembic import op
 
 revision: str = "001"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.create_table("users",
+    op.create_table(
+        "users",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("email", sa.String(255), nullable=False),
         sa.Column("username", sa.String(100), nullable=False),
@@ -27,7 +30,8 @@ def upgrade() -> None:
     op.create_index("ix_users_email", "users", ["email"], unique=True)
     op.create_index("ix_users_id", "users", ["id"], unique=False)
 
-    op.create_table("token_blacklist",
+    op.create_table(
+        "token_blacklist",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("jti", sa.String(255), nullable=False),
         sa.Column("expires_at", sa.DateTime(), nullable=False),
@@ -37,7 +41,8 @@ def upgrade() -> None:
     op.create_index("ix_token_blacklist_jti", "token_blacklist", ["jti"], unique=True)
     op.create_index("ix_token_blacklist_id", "token_blacklist", ["id"], unique=False)
 
-    op.create_table("images",
+    op.create_table(
+        "images",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("original_name", sa.String(500), nullable=False),

@@ -17,19 +17,21 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 import os
-import sys
+
 from dotenv import load_dotenv
 
-# Ensure backend package is importable
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
+# Run from repo root: alembic -c backend/alembic.ini ...
+# (alembic.ini prepend_sys_path=. adds cwd — no sys.path in this file)
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-from database import Base
+from backend.config import get_settings
+from backend.core.database import Base
+import backend.models  # noqa: F401 — register all models with metadata
+
 target_metadata = Base.metadata
 
-# Read DATABASE_URL from env
-config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", "sqlite:///./brain_tumor.db"))
+# Same URL resolution as the app (relative SQLite → backend/)
+config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -75,9 +77,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

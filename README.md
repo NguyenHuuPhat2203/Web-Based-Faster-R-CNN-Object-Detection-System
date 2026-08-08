@@ -25,19 +25,21 @@ The following results demonstrate the performance of the Faster R-CNN model on v
 - This project aims to automatically detect tumor regions using deep learning–based object detection.
 
 ## Architecture
+See [ARCHITECTURE.md](ARCHITECTURE.md) for Pipeline Clean Architecture (`ml/` kernel, `backend/` serve shell, `training/` train shell).
+
 ```
 Browser (Frontend)
     |
-    | HTTP (Image Upload)
+    | HTTP (Image Upload)  — v1 bare contract
     v
-Backend API (FastAPI)
+Backend API (FastAPI)  — /predict, /v2/predict
     |
-    | Load Model & Run Inference
+    | pipeline → ml.backbone
     v
-Faster R-CNN (PyTorch)
+Faster R-CNN / YOLO
     |
     v
-Detection Results (Annotated Image)
+Detection Results (+ optional Grad-CAM on v1 / v2?explain=true)
 ```
 
 ## Dataset
@@ -49,6 +51,7 @@ Detection Results (Annotated Image)
 - Dataset configuration: brain-tumor.yaml
 - Classes: Brain tumor
 - Annotation format: YOLO
+- Place under `data/raw/vN/` (gitignored); verify with `training/scripts/verify_dataset.py`
 
 ## Methodology
 1. Data preprocessing
@@ -64,31 +67,34 @@ Detection Results (Annotated Image)
 - Learning rate: 0.005
 - Epochs: 10
 - Hardware: NVIDIA GPU T4
+- Train scripts: `training/scripts/train_faster_rcnn.py`, `train_yolo.py`
+- Promote FRCNN weights: `training/scripts/export_safetensors.py`
 
 ## Project Structure
 ```
-├── backend/                # FastAPI
-│   └── main.py
-├── checkpoints/
-│   └── model.pth
-├── data/
-│   └── raw/
-├── frontend/               # React / HTML / CSS
-│   ├── src/
-│   │   ├── App.css
-│   │   ├── App.tsx
-│   │   ├── index.css
-│   │   └── main.tsx
-│   ├── .gitignore
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.ts
-├── models/
-│   ├── faster_rcnn_scratch.ipynb
-│   └── train.ipynb
-├── .gitignore
-├── README.md
-└── requirements.txt
+├── ml/                     # shared ML kernel
+│   ├── backbone/
+│   ├── core/
+│   ├── config/
+│   └── transforms/
+├── backend/                # FastAPI serve shell (Python package)
+│   ├── pipeline/
+│   ├── api/                # v1 + v2
+│   ├── services/
+│   ├── alembic/
+│   └── tests/
+├── training/               # train / eval / export
+│   ├── scripts/
+│   ├── trainer/
+│   ├── data/
+│   └── notebooks/          # EDA only
+├── registry/               # promoted artifacts + metadata
+├── checkpoints/            # local/dev weights
+├── data/raw/               # versioned datasets (gitignored)
+├── frontend/               # React (API v2 by default)
+├── models/                 # archived notebooks
+├── ARCHITECTURE.md
+└── README.md
 ```
 
 ## Installation
@@ -96,22 +102,56 @@ Detection Results (Annotated Image)
 ```bash
 git clone https://github.com/NguyenHuuPhat2203/Web-Based-Faster-R-CNN-Object-Detection-System.git
 cd Web-Based-Faster-R-CNN-Object-Detection-System
+
+# Create and activate a virtual environment (example: Side_Project root)
+cd ..
 python -m venv .venv
-source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
-pip install -r requirements.txt
+# On Windows:
+.venv\Scripts\activate
+# On Linux/macOS:
+# source .venv/bin/activate
+
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install -r Brain_Tumor_FasterRCNN/backend/requirements.txt
+pip install -r Brain_Tumor_FasterRCNN/backend/requirements-dev.txt
 ```
+
+Always run Python commands from the **repo root** (`Brain_Tumor_FasterRCNN/`) so `import ml` and `import backend` resolve via the working directory. Do **not** `pip install -e .` for this repo (tooling-only `pyproject.toml`). If you previously installed `brain-tumor-workspace`, run `pip uninstall brain-tumor-workspace`.
 
 ### 2. Training (Deep Learning)
-- Open `models/train.ipynb` in Jupyter or VS Code or google colab (preferred).
-- Run cells to train the model and save the checkpoint to `checkpoints/model.pth` or manually download from google colab or google drive.
+- One-shot local E2E smoke (download → subsample 16/8 → 1 epoch FRCNN + YOLO):
+```bash
+python -m training.scripts.run_e2e_smoke
+```
+- Individual steps:
+```bash
+python -m training.scripts.download_dataset          # Ultralytics zip → data/raw/v1
+python -m training.scripts.subsample_dataset         # → data/raw/v1-smoke (gitignored)
+python -m training.scripts.train_faster_rcnn --epochs 1 \
+  --images data/raw/v1-smoke/train/images \
+  --labels data/raw/v1-smoke/train/labels \
+  --output-dir training/outputs/e2e_smoke/faster_rcnn
+python -m training.scripts.train_yolo --epochs 1 \
+  --data data/raw/v1-smoke/brain-tumor.yaml \
+  --project training/outputs/e2e_smoke/yolo
+```
+- Full train (after smoke): `train_faster_rcnn` / `train_yolo` on `data/raw/v1` with default epochs.
+- Promote (explicit version; refuses `v1.0.0` without `--i-know`):
+```bash
+python -m training.scripts.promote_checkpoint --model faster_rcnn \
+  --checkpoint training/outputs/faster_rcnn/best_model.pth --version v1.1.0
+```
+- Or HF → registry: `python -m training.scripts.promote_from_hf`
+- Legacy notebooks under `models/` are archived (see `models/README.md`).
 
 ### 3. Backend (FastAPI)
-- Run the server:
+- From the **repo root**:
 ```bash
-cd backend
-uvicorn main:app --reload
+python -m uvicorn backend.main:app --reload
 ```
 - The API will be available at `http://localhost:8000`.
+- Health: `GET /healthz` (includes `model_version`). Metrics: `GET /metrics`.
+- Migrations: `alembic -c backend/alembic.ini upgrade head`
 
 ### 4. Frontend (React)
 - Install dependencies:
@@ -124,6 +164,24 @@ npm install
 npm run dev
 ```
 - Open the provided URL:`http://localhost:8001`.
+- Predict API defaults to **v2** (`/v2/predict`, item-schema). Rollback:
+```bash
+# frontend/.env
+VITE_API_VERSION=v1
+```
+  Then restart Vite (or rebuild Docker with `VITE_API_VERSION=v1`).
+- Detector requests Grad-CAM (`explain=true`) for Faster R-CNN; webcam always uses `explain=false`.
+
+### 5. Docker Compose (thin image + mounted weights)
+```bash
+# Optional: materialize registry weights on the host first
+python -m training.scripts.promote_from_hf
+
+docker compose up --build
+```
+- Backend: `http://localhost:8000` (mounts `./registry`, `./checkpoints` read-only)
+- Frontend: `http://localhost:8001` (starts after backend `/healthz` is healthy)
+- Image does **not** bake model weights; missing local weights fall back to Hugging Face at runtime.
 
 ## Future Works
 - Try YOLO models for faster inference

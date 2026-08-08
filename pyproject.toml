@@ -1,0 +1,49 @@
+# Tooling only — do not pip-install this repo as a package.
+# Run Python from the repo root so `ml` and `backend` resolve on cwd.
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "D", "UP", "B"]
+ignore = ["D104", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/alembic/env.py" = ["D100", "E402", "I001"]
+"backend/alembic/versions/*.py" = ["D103", "D415", "E501"]
+# training scripts set up sys.path / argparse before module-level imports (deliberate)
+"training/scripts/*.py" = ["E402"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
+plugins = ["sqlalchemy.ext.mypy.plugin"]
+
+[[tool.mypy.overrides]]
+module = [
+    "backend.services.*",
+    "backend.repositories.*",
+    "ml.core.*",
+    "backend.schemas.*",
+]
+disable_error_code = ["assignment", "arg-type"]
+
+[[tool.mypy.overrides]]
+module = ["ml.core.*", "backend.schemas.*"]
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+markers = [
+    "overfit: single-batch overfit sanity test",
+    "edge: edge-case inference tests",
+    "perf: latency/VRAM budget tests",
+    "schema: API schema contract tests",
+    "golden: model/output regression against fixed fixtures",
+]
+pythonpath = ["."]

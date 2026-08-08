@@ -85,7 +85,7 @@ export function WebcamCapture({ model, threshold, onResult, onError }: WebcamCap
       if (!blob) return;
 
       const file = new File([blob], `webcam-${Date.now()}.jpg`, { type: "image/jpeg" });
-      const result = await predict(file, threshold, model);
+      const result = await predict(file, threshold, model, { explain: false });
 
       // Draw overlay
       const overlay = canvasOverlayRef.current;

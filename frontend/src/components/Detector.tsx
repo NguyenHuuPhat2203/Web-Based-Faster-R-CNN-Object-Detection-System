@@ -234,7 +234,9 @@ export function Detector() {
     setLoadingPred(true);
     setLatestImageId(null);
     try {
-      const data = await predict(image, threshold, model);
+      const data = await predict(image, threshold, model, {
+        explain: model === "faster-rcnn",
+      });
       setResults(data);
     } catch (err: any) {
       setDetectError(err.message || "Detection failed");

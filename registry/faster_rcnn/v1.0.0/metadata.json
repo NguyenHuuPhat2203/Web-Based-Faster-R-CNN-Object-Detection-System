@@ -1,0 +1,14 @@
+{
+  "model_type": "faster-rcnn",
+  "version": "v1.0.0",
+  "dataset_version": "v1",
+  "dataset_hash": "",
+  "metrics": {
+    "mAP@0.5": null,
+    "mAP@0.5:0.95": null
+  },
+  "git_commit": "fa2db6bdd38e7051873105713c59747154d6d105",
+  "created_at": "2026-08-08T09:09:12.471128+00:00",
+  "weights": "model.safetensors",
+  "source_checkpoint": "checkpoints\\model.pth"
+}

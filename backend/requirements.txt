@@ -12,8 +12,13 @@ cryptography
 requests
 python-dotenv
 pydantic[email]
+pydantic-settings
 ultralytics
 reportlab
 matplotlib
 huggingface_hub
 alembic
+safetensors
+structlog
+prometheus-client
+tensorboard

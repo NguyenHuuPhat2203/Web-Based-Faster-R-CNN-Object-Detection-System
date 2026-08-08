@@ -2,30 +2,56 @@
 
 from __future__ import annotations
 
-from typing import Generator
+import io
+from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image as PILImage
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# IMPORTANT: Patch database engine BEFORE any app code imports it.
-# We use StaticPool so all connections share the same in-memory SQLite DB.
-import database
+import backend.core.database as database_module
+from ml.core.entities import InferenceResult
+
 TEST_ENGINE = create_engine(
-    "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    "sqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
 )
 TEST_SESSION = sessionmaker(autocommit=False, autoflush=False, bind=TEST_ENGINE)
-database.engine = TEST_ENGINE
-database.SessionLocal = TEST_SESSION
+database_module.engine = TEST_ENGINE
+database_module.SessionLocal = TEST_SESSION
 
-# Now it's safe to import app code — it will use our patched engine
-import models  # noqa: F401, E402 — register tables with Base.metadata
-from database import Base, get_db  # noqa: E402
-from main import app  # noqa: E402
+from backend.core.database import Base, get_db  # noqa: E402
+from backend.main import app  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def mock_ml_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid loading real torch checkpoints during HTTP integration tests."""
+
+    def _mock_run_frcnn(
+        contents: bytes, *, threshold: float = 0.5, explain: bool = True
+    ):
+        pil = PILImage.open(io.BytesIO(contents)).convert("RGB")
+        return pil, InferenceResult(
+            model_type="faster-rcnn", model_version="resnet50-fpn-v1"
+        )
+
+    def _mock_run_yolo(contents: bytes, *, threshold: float = 0.5):
+        pil = PILImage.open(io.BytesIO(contents)).convert("RGB")
+        return pil, InferenceResult(model_type="yolov8", model_version="yolov8n")
+
+    monkeypatch.setattr(
+        "backend.services.prediction_service.run_faster_rcnn", _mock_run_frcnn
+    )
+    monkeypatch.setattr("backend.services.prediction_service.run_yolo", _mock_run_yolo)
+
 
 def override_get_db() -> Generator:
+    """Yield an in-memory database session for tests."""
     db = TEST_SESSION()
     try:
         yield db
@@ -34,11 +60,25 @@ def override_get_db() -> Generator:
 
 
 @pytest.fixture
-def client() -> Generator:
+def db_session() -> Generator:
+    """Provide a database session with a fresh schema for unit tests."""
+    Base.metadata.create_all(bind=TEST_ENGINE)
+    db = TEST_SESSION()
+    try:
+        yield db
+    finally:
+        db.rollback()
+        db.close()
+        Base.metadata.drop_all(bind=TEST_ENGINE)
+
+
+@pytest.fixture
+def client() -> Generator[TestClient, None, None]:
+    """Provide a FastAPI test client backed by an in-memory database."""
     Base.metadata.create_all(bind=TEST_ENGINE)
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
+    with TestClient(app) as test_client:
+        yield test_client
     app.dependency_overrides.clear()
     Base.metadata.drop_all(bind=TEST_ENGINE)
 
@@ -46,28 +86,32 @@ def client() -> Generator:
 @pytest.fixture
 def auth_headers(client: TestClient) -> dict[str, str]:
     """Register a test user and return Bearer auth headers."""
-    client.post("/auth/register", json={
-        "email": "test@example.com",
-        "username": "TestUser",
-        "password": "test123456",
-    })
+    client.post(
+        "/auth/register",
+        json={
+            "email": "test@example.com",
+            "username": "TestUser",
+            "password": "test123456",
+        },
+    )
     return _login(client, "test@example.com", "test123456")
 
 
 def _login(client: TestClient, email: str, password: str) -> dict[str, str]:
-    resp = client.post("/auth/login", json={"email": email, "password": password})
-    token = resp.json()["access_token"]
+    """Log in and return authorization headers."""
+    response = client.post("/auth/login", json={"email": email, "password": password})
+    token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 def test_image_bytes() -> bytes:
-    """Return a minimal valid PNG image (64×64, RGB)."""
+    """Return a minimal valid PNG image (64x64, RGB)."""
     import struct
     import zlib
 
     def _make_png(width: int = 64, height: int = 64) -> bytes:
-        sig = b"\x89PNG\r\n\x1a\n"
+        signature = b"\x89PNG\r\n\x1a\n"
         ihdr_data = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
         ihdr_crc = zlib.crc32(b"IHDR" + ihdr_data) & 0xFFFFFFFF
         ihdr = struct.pack(">I", 13) + b"IHDR" + ihdr_data + struct.pack(">I", ihdr_crc)
@@ -76,9 +120,14 @@ def test_image_bytes() -> bytes:
             raw += b"\x00" + b"\x80\x80\x80" * width
         compressed = zlib.compress(raw)
         idat_crc = zlib.crc32(b"IDAT" + compressed) & 0xFFFFFFFF
-        idat = struct.pack(">I", len(compressed)) + b"IDAT" + compressed + struct.pack(">I", idat_crc)
+        idat = (
+            struct.pack(">I", len(compressed))
+            + b"IDAT"
+            + compressed
+            + struct.pack(">I", idat_crc)
+        )
         iend_crc = zlib.crc32(b"IEND") & 0xFFFFFFFF
         iend = struct.pack(">I", 0) + b"IEND" + struct.pack(">I", iend_crc)
-        return sig + ihdr + idat + iend
+        return signature + ihdr + idat + iend
 
     return _make_png()
