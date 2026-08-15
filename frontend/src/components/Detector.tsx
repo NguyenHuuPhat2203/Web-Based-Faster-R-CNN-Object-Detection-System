@@ -113,6 +113,7 @@ export function Detector() {
       results.boxes.forEach((box, i) => {
         const [xmin, ymin, xmax, ymax] = box;
         const score = results.scores[i];
+        if (score < threshold) return; // client-side re-filter by slider
         const label = results.label_names?.[i] || LABEL_NAMES[results.labels[i]] || `Class ${results.labels[i]}`;
 
         ctx.strokeStyle = "#10b981";
@@ -171,7 +172,7 @@ export function Detector() {
       }
       ctx.setLineDash([]);
     }
-  }, [results, measurements, measureStart]);
+  }, [results, measurements, measureStart, threshold]);
 
   const renderCanvas = useCallback(() => {
     if (!canvasRef.current || !imgRef.current) return;
@@ -197,7 +198,7 @@ export function Detector() {
 
   useEffect(() => {
     if (results) renderCanvas();
-  }, [results, renderCanvas, showHeatmap, viewMode, measurements, measureStart]);
+  }, [results, renderCanvas, showHeatmap, viewMode, measurements, measureStart, threshold]);
 
   useEffect(() => {
     if (!showHeatmap || !results?.heatmap || !canvasRef.current || !imgRef.current) return;
@@ -333,11 +334,17 @@ export function Detector() {
   };
 
   /* ─── Computed values for sidebar ─── */
-  const avgConfidence = results && results.scores.length > 0
-    ? ((results.scores.reduce((a, b) => a + b, 0) / results.scores.length) * 100).toFixed(1)
-    : null;
-
-  const topLabel = results?.label_names?.[0] || null;
+  const visibleCount = results
+    ? results.boxes.filter((_, i) => (results.scores[i] ?? 0) >= threshold).length
+    : 0;
+  const avgConfidence =
+    results && visibleCount > 0
+      ? ((results.scores.filter((s) => s >= threshold).reduce((a, b) => a + b, 0) /
+          visibleCount) *
+          100).toFixed(1)
+      : null;
+  const topLabel =
+    results?.label_names?.[results.scores.findIndex((s) => s >= threshold)] ?? null;
 
   return (
     <div className="page-container">
@@ -440,9 +447,9 @@ export function Detector() {
           </div>
 
           {/* Results stats below viewer */}
-          {results && !useWebcam && results.boxes.length > 0 && (
+          {results && !useWebcam && visibleCount > 0 && (
             <div className="stats">
-              <div className="stat-card"><h3>Detections</h3><p className="stat-value">{results.boxes.length}</p></div>
+              <div className="stat-card"><h3>Detections</h3><p className="stat-value">{visibleCount}</p></div>
               <div className="stat-card"><h3>Avg Score</h3><p className="stat-value">{avgConfidence}%</p></div>
               {topLabel && (
                 <div className="stat-card"><h3>Top Class</h3><p className="stat-value-sm">{topLabel}</p></div>
@@ -450,7 +457,7 @@ export function Detector() {
             </div>
           )}
 
-          {results && !useWebcam && results.boxes.length === 0 && (
+          {results && !useWebcam && visibleCount === 0 && (
             <div className="no-detections">
               <AlertCircle size={24} />
               <p><strong>No tumors detected</strong> above {(threshold * 100).toFixed(0)}% confidence.</p>

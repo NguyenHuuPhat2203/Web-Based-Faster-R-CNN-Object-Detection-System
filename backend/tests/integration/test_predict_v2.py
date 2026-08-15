@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from backend.services.prediction_service import PredictionService
+
 
 class TestPredictV2:
     """v2 Faster R-CNN predict contract."""
@@ -35,6 +37,49 @@ class TestPredictV2:
         assert "success" not in data
         assert "boxes" in data["result"]
         assert data["result"]["model_type"] == "faster-rcnn"
+
+    def test_returns_full_box_set_below_default_threshold(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        test_image_bytes: bytes,
+    ) -> None:
+        """v2 returns all post-NMS boxes (client slider owns filtering)."""
+        response = client.post(
+            "/v2/predict",
+            files={"file": ("test.png", test_image_bytes, "image/png")},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        result = response.json()["result"]
+        # Mock returns scores [0.9, 0.3]; both must be present even though the
+        # default threshold is 0.5 — the server must NOT filter for v2.
+        assert len(result["boxes"]) == 2
+        assert result["scores"] == [0.9, 0.3]
+
+    def test_passes_floor_min_score(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        test_image_bytes: bytes,
+        monkeypatch,
+    ) -> None:
+        """v2 routes the inference floor (0.1) into the service."""
+        captured: dict = {}
+        original = PredictionService.run_faster_rcnn
+
+        def spy(self, **kwargs):
+            captured.update(kwargs)
+            return original(self, **kwargs)
+
+        monkeypatch.setattr(PredictionService, "run_faster_rcnn", spy)
+        response = client.post(
+            "/v2/predict",
+            files={"file": ("test.png", test_image_bytes, "image/png")},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert captured["min_score"] == 0.1
 
     def test_explain_query_accepted(
         self,

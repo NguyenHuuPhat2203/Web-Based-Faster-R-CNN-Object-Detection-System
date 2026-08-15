@@ -62,13 +62,17 @@ def run_faster_rcnn(
     *,
     threshold: float = 0.5,
     explain: bool = True,
+    min_score: float | None = None,
 ) -> tuple[PILImage.Image, InferenceResult]:
     """Run Faster R-CNN inference on raw image bytes.
 
     Args:
         contents: Encoded image bytes.
-        threshold: Confidence threshold.
+        threshold: Confidence threshold (v1 server-side filter).
         explain: When True, compute Grad-CAM if detections exist (v1 default).
+        min_score: Floor for returned detections; when set, ``threshold`` is NOT
+            applied server-side (v2 client-side threshold slider owns filtering)
+            and ``min_score`` is the floor instead.
 
     Returns:
         Tuple of PIL image and ``InferenceResult``.
@@ -98,13 +102,14 @@ def run_faster_rcnn(
             free_gpu_memory()
             raise
 
+    filter_at = threshold if min_score is None else min_score
     with stage_timer("postprocess", model_version=FRCNN_MODEL_VERSION):
         prediction = predictions[0]
         boxes, scores, labels = filter_by_threshold(
             prediction["boxes"],
             prediction["scores"],
             prediction["labels"],
-            threshold=threshold,
+            threshold=filter_at,
         )
         label_list = (
             [int(x) for x in labels.detach().cpu().tolist()] if labels.numel() else []

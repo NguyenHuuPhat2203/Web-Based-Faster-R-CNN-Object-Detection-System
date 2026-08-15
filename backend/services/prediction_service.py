@@ -44,6 +44,7 @@ class PredictionService:
         content_type: str | None,
         threshold: float,
         explain: bool = True,
+        min_score: float | None = None,
     ) -> PredictionResult:
         """Run Faster R-CNN inference on an uploaded image.
 
@@ -52,14 +53,18 @@ class PredictionService:
             contents: Raw image bytes.
             original_name: Original client filename.
             content_type: MIME type reported by the client.
-            threshold: Confidence threshold for detections.
+            threshold: Confidence threshold (v1 server-side filter; v2 slider default).
             explain: Compute Grad-CAM when True (v1 default).
+            min_score: When set, detections are returned down to this floor (v2).
 
         Returns:
             Prediction response including optional Grad-CAM heatmap.
         """
         pil_image, result = run_faster_rcnn(
-            contents, threshold=threshold, explain=explain
+            contents,
+            threshold=threshold,
+            explain=explain,
+            min_score=min_score,
         )
         self._persist(
             user=user,
@@ -80,6 +85,7 @@ class PredictionService:
         original_name: str | None,
         content_type: str | None,
         threshold: float,
+        min_score: float | None = None,
     ) -> PredictionResult:
         """Run YOLOv8 inference on an uploaded image.
 
@@ -88,12 +94,13 @@ class PredictionService:
             contents: Raw image bytes.
             original_name: Original client filename.
             content_type: MIME type reported by the client.
-            threshold: Confidence threshold for detections.
+            threshold: Confidence threshold (v1 server-side filter; v2 slider default).
+            min_score: When set, detections are returned down to this floor (v2).
 
         Returns:
             Prediction response without heatmap data.
         """
-        pil_image, result = run_yolo(contents, threshold=threshold)
+        pil_image, result = run_yolo(contents, threshold=threshold, min_score=min_score)
         self._persist(
             user=user,
             pil_image=pil_image,

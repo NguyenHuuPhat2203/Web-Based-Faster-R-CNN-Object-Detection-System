@@ -40,6 +40,7 @@ async def predict_v2(
             content_type=file.content_type,
             threshold=threshold,
             explain=explain,
+            min_score=0.1,
         )
         return InferenceItemOk(result=result)
     except DomainError:
@@ -67,6 +68,7 @@ async def predict_yolo_v2(
             original_name=file.filename,
             content_type=file.content_type,
             threshold=threshold,
+            min_score=0.1,
         )
         return InferenceItemOk(result=result)
     except DomainError:

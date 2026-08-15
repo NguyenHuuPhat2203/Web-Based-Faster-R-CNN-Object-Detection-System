@@ -28,12 +28,16 @@ def run_yolo(
     contents: bytes,
     *,
     threshold: float = 0.5,
+    min_score: float | None = None,
 ) -> tuple[PILImage.Image, InferenceResult]:
     """Run YOLOv8 inference on raw image bytes.
 
     Args:
         contents: Encoded image bytes.
-        threshold: Confidence threshold.
+        threshold: Confidence threshold (v1 server-side filter).
+        min_score: Floor for returned detections; when set, ``threshold`` is NOT
+            applied server-side (v2 client-side threshold slider owns filtering)
+            and ``min_score`` is the floor instead.
 
     Returns:
         Tuple of PIL image and ``InferenceResult``.
@@ -49,15 +53,16 @@ def run_yolo(
     )
     class_names = get_class_names()
 
+    conf = threshold if min_score is None else min_score
     try:
         with stage_timer("forward", model_version=YOLO_MODEL_VERSION):
-            results = model(pil_image, conf=threshold, verbose=False)
+            results = model(pil_image, conf=conf, verbose=False)
     except Exception as exc:
         if "out of memory" in str(exc).lower():
             logger.warning("cuda_oom_yolo")
             free_gpu_memory()
             with stage_timer("forward", model_version=YOLO_MODEL_VERSION):
-                results = model(pil_image, conf=threshold, verbose=False)
+                results = model(pil_image, conf=conf, verbose=False)
         else:
             raise
 

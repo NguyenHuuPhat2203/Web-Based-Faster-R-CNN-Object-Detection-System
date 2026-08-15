@@ -18,6 +18,7 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [threshold, setThreshold] = useState(0.5);
   const [fallbackResults, setFallbackResults] = useState<PredictionResult | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -44,6 +45,13 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
   }, [imageId, results]);
 
   const effectiveResults = results ?? fallbackResults;
+  const visibleBoxes =
+    effectiveResults?.boxes.filter((_, i) => (effectiveResults.scores[i] ?? 0) >= threshold) ??
+    [];
+  const visibleLabels =
+    effectiveResults?.label_names?.filter(
+      (_, i) => (effectiveResults.scores[i] ?? 0) >= threshold,
+    ) ?? [];
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +92,7 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
       effectiveResults.boxes.forEach((box, i) => {
         const [xmin, ymin, xmax, ymax] = box;
         const score = effectiveResults.scores[i];
+        if (score < threshold) return; // client-side re-filter by slider
         const label = effectiveResults.label_names?.[i] || `Class ${effectiveResults.labels[i]}`;
 
         ctx.strokeStyle = "#10b981";
@@ -104,7 +113,7 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
     } else {
       img.onload = onLoad;
     }
-  }, [effectiveResults, blobUrl]);
+  }, [effectiveResults, blobUrl, threshold]);
 
   const handleDownloadReport = async () => {
     const url = getReportUrl(imageId);
@@ -146,6 +155,12 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
           <button className="btn btn-tiny" onClick={handleDownloadReport} title="Download Report">
             <FileText size={14} /> Report
           </button>
+          <label className="threshold-label" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            Conf: <strong>{(threshold * 100).toFixed(0)}%</strong>
+            <input type="range" min="0.05" max="0.95" step="0.05" value={threshold}
+              onChange={(e) => setThreshold(parseFloat(e.target.value))}
+              className="threshold-slider" style={{ width: "7rem" }} />
+          </label>
         </div>
 
         {/* Image area */}
@@ -176,11 +191,11 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
         </div>
 
         {/* Detection summary */}
-        {effectiveResults && effectiveResults.boxes.length > 0 && (
+        {visibleBoxes.length > 0 && (
           <div className="viewer-summary">
-            <p><strong>{effectiveResults.boxes.length}</strong> detection{effectiveResults.boxes.length !== 1 ? "s" : ""}</p>
-            {effectiveResults.label_names?.length > 0 && (
-              <p>Top class: <strong>{effectiveResults.label_names[0]}</strong></p>
+            <p><strong>{visibleBoxes.length}</strong> detection{visibleBoxes.length !== 1 ? "s" : ""}</p>
+            {visibleLabels.length > 0 && (
+              <p>Top class: <strong>{visibleLabels[0]}</strong></p>
             )}
           </div>
         )}
