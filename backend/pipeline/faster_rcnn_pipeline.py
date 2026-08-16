@@ -99,8 +99,23 @@ def run_faster_rcnn(
             with stage_timer("forward", model_version=FRCNN_MODEL_VERSION):
                 predictions = _forward(model, image_tensor)
         except torch.cuda.OutOfMemoryError:
+            logger.warning("cpu_fallback", model_type="faster-rcnn")
             free_gpu_memory()
-            raise
+            # Fresh CPU model: not cached, GPU cache untouched (A1).
+            settings = get_settings()
+            model = load_faster_rcnn(
+                checkpoint_path=settings.faster_rcnn_checkpoint,
+                safetensors_path=settings.faster_rcnn_safetensors,
+                hf_repo=settings.hf_checkpoint_repo,
+                hf_filename=settings.hf_checkpoint_filename,
+                hf_token=settings.hf_access_token or None,
+                device="cpu",
+                use_cache=False,
+            )
+            image_tensor = image_tensor.to("cpu")
+            with stage_timer("forward", model_version=FRCNN_MODEL_VERSION):
+                predictions = _forward(model, image_tensor)
+            explain = False  # Grad-CAM skipped in CPU fallback
 
     filter_at = threshold if min_score is None else min_score
     with stage_timer("postprocess", model_version=FRCNN_MODEL_VERSION):

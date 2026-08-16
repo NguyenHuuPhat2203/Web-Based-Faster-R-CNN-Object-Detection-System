@@ -6,6 +6,7 @@ import io
 import time
 
 import structlog
+import torch
 from PIL import Image as PILImage
 
 from ml.backbone.yolo import get_class_names, load_yolo, reset_model_cache
@@ -13,7 +14,7 @@ from ml.core.constants import YOLO_MODEL_VERSION
 from ml.core.entities import InferenceResult
 
 from ..config import get_settings
-from .memory import free_gpu_memory
+from .memory import free_gpu_memory, is_oom
 from .timing import stage_timer
 
 logger = structlog.get_logger(__name__)
@@ -57,14 +58,25 @@ def run_yolo(
     try:
         with stage_timer("forward", model_version=YOLO_MODEL_VERSION):
             results = model(pil_image, conf=conf, verbose=False)
-    except Exception as exc:
-        if "out of memory" in str(exc).lower():
-            logger.warning("cuda_oom_yolo")
-            free_gpu_memory()
+    except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
+        if not is_oom(exc):
+            raise
+        logger.warning("cuda_oom_yolo")
+        free_gpu_memory()
+        try:
             with stage_timer("forward", model_version=YOLO_MODEL_VERSION):
                 results = model(pil_image, conf=conf, verbose=False)
-        else:
-            raise
+        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc2:
+            if not is_oom(exc2):
+                raise
+            logger.warning("cpu_fallback", model_type="yolov8")
+            free_gpu_memory()
+            # Fresh CPU model: not cached, GPU cache untouched (A1).
+            model = load_yolo(
+                checkpoint_path=settings.yolo_checkpoint, use_cache=False
+            ).to("cpu")
+            with stage_timer("forward", model_version=YOLO_MODEL_VERSION):
+                results = model(pil_image, conf=conf, verbose=False)
 
     empty = InferenceResult(
         model_type="yolov8",
