@@ -42,3 +42,36 @@ def test_promote_checkpoint_refuses_v1_without_flag() -> None:
         ]
     )
     assert code == 2
+
+
+def test_promote_yolo_refuses_v1_without_flag() -> None:
+    """YOLO promote also guards the production slot."""
+    from pathlib import Path
+
+    from training.scripts.promote_yolo import main
+
+    code = main(
+        [
+            "--checkpoint",
+            str(Path("nonexistent.pt")),
+            "--version",
+            "v1.0.0",
+        ]
+    )
+    assert code == 2
+
+
+def test_promote_from_hf_refuses_v1_without_flag(tmp_path) -> None:
+    """The HF promote path needs --i-know before touching the production slot."""
+    from training.scripts.promote_from_hf import main
+
+    code = main(
+        [
+            "--checkpoint-dir",
+            str(tmp_path),
+            "--skip-download",
+            "--version",
+            "v1.0.0",
+        ]
+    )
+    assert code == 2

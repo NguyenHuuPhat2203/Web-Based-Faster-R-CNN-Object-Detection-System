@@ -16,6 +16,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 from training.scripts.export_safetensors import export_and_promote
 from training.scripts.promote_yolo import promote_yolo
+from training.scripts.registry import RegistryGuardError
 
 
 def _download_frcnn_checkpoint(
@@ -74,7 +75,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Use existing checkpoints/model.pth without calling Hugging Face",
     )
+    parser.add_argument("--i-know", action="store_true", help="Allow v1.0.0")
     args = parser.parse_args(argv)
+
+    if args.version == "v1.0.0" and not args.i_know:
+        print(
+            "Refusing to promote to v1.0.0 without --i-know "
+            "(use a smoke version, or pass --i-know).",
+            file=sys.stderr,
+        )
+        return 2
 
     checkpoint_path = args.checkpoint_dir / "model.pth"
     if args.skip_download:
@@ -91,28 +101,38 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"Saved {checkpoint_path}")
 
-    out = export_and_promote(
-        checkpoint=checkpoint_path,
-        version=args.version,
-        dataset_version=args.dataset_version,
-        dataset_hash=args.dataset_hash,
-        map50=args.map50,
-        map5095=args.map5095,
-        registry_root=args.registry_root,
-    )
-    print(f"Promoted Faster R-CNN to {out}")
-
-    yolo_src = args.checkpoint_dir / "yolov8_tumor.pt"
-    if yolo_src.exists():
-        yolo_out = promote_yolo(
-            checkpoint=yolo_src,
+    try:
+        out = export_and_promote(
+            checkpoint=checkpoint_path,
             version=args.version,
             dataset_version=args.dataset_version,
             dataset_hash=args.dataset_hash,
-            map50=None,
+            map50=args.map50,
+            map5095=args.map5095,
             registry_root=args.registry_root,
+            i_know=args.i_know,
         )
-        print(f"Promoted YOLO to {yolo_out}")
+        print(f"Promoted Faster R-CNN to {out}")
+    except RegistryGuardError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    yolo_src = args.checkpoint_dir / "yolov8_tumor.pt"
+    if yolo_src.exists():
+        try:
+            yolo_out = promote_yolo(
+                checkpoint=yolo_src,
+                version=args.version,
+                dataset_version=args.dataset_version,
+                dataset_hash=args.dataset_hash,
+                map50=None,
+                registry_root=args.registry_root,
+                i_know=args.i_know,
+            )
+            print(f"Promoted YOLO to {yolo_out}")
+        except RegistryGuardError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
     else:
         print(f"Skipping YOLO promote (not found: {yolo_src})")
 

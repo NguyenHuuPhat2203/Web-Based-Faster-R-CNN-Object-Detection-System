@@ -15,6 +15,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 from training.scripts.export_safetensors import export_and_promote
 from training.scripts.promote_yolo import promote_yolo
+from training.scripts.registry import RegistryGuardError
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -50,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.version == "v1.0.0" and not args.i_know:
         print(
             "Refusing to promote to v1.0.0 without --i-know "
-            "(use a smoke version like v0.0.0-smoke, or pass --i-know).",
+            "(use a smoke version, or pass --i-know).",
             file=sys.stderr,
         )
         return 2
@@ -59,25 +60,31 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Checkpoint not found: {args.checkpoint}", file=sys.stderr)
         return 1
 
-    if args.model == "faster_rcnn":
-        out = export_and_promote(
-            checkpoint=args.checkpoint,
-            version=args.version,
-            dataset_version=args.dataset_version,
-            dataset_hash=args.dataset_hash,
-            map50=args.map50,
-            map5095=args.map5095,
-            registry_root=args.registry_root,
-        )
-    else:
-        out = promote_yolo(
-            checkpoint=args.checkpoint,
-            version=args.version,
-            dataset_version=args.dataset_version,
-            dataset_hash=args.dataset_hash,
-            map50=args.map50,
-            registry_root=args.registry_root,
-        )
+    try:
+        if args.model == "faster_rcnn":
+            out = export_and_promote(
+                checkpoint=args.checkpoint,
+                version=args.version,
+                dataset_version=args.dataset_version,
+                dataset_hash=args.dataset_hash,
+                map50=args.map50,
+                map5095=args.map5095,
+                registry_root=args.registry_root,
+                i_know=args.i_know,
+            )
+        else:
+            out = promote_yolo(
+                checkpoint=args.checkpoint,
+                version=args.version,
+                dataset_version=args.dataset_version,
+                dataset_hash=args.dataset_hash,
+                map50=args.map50,
+                registry_root=args.registry_root,
+                i_know=args.i_know,
+            )
+    except RegistryGuardError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
 
     print(f"Promoted {args.model} -> {out}")
     return 0

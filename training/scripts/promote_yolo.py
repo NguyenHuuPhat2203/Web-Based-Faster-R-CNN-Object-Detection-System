@@ -4,29 +4,12 @@
 from __future__ import annotations
 
 import argparse
-import json
-import shutil
-import subprocess
-from datetime import UTC, datetime
+import sys
 from pathlib import Path
 
+from training.scripts.registry import RegistryGuardError, write_registry_entry
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-
-def _git_commit() -> str:
-    """Return current git commit hash or 'unknown'."""
-    try:
-        return (
-            subprocess.check_output(
-                ["git", "rev-parse", "HEAD"],
-                cwd=_PROJECT_ROOT,
-                stderr=subprocess.DEVNULL,
-            )
-            .decode()
-            .strip()
-        )
-    except Exception:
-        return "unknown"
 
 
 def promote_yolo(
@@ -37,27 +20,21 @@ def promote_yolo(
     dataset_hash: str,
     map50: float | None,
     registry_root: Path,
+    i_know: bool = False,
 ) -> Path:
-    """Copy YOLO weights into registry and write metadata."""
-    out_dir = registry_root / "yolo" / version
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "yolov8_tumor.pt"
-    shutil.copy2(checkpoint, out_path)
-    metadata = {
-        "model_type": "yolov8",
-        "version": version,
-        "dataset_version": dataset_version,
-        "dataset_hash": dataset_hash,
-        "metrics": {"mAP@0.5": map50},
-        "git_commit": _git_commit(),
-        "created_at": datetime.now(UTC).isoformat(),
-        "weights": out_path.name,
-        "source_checkpoint": str(checkpoint),
-    }
-    (out_dir / "metadata.json").write_text(
-        json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+    """Copy YOLO weights into the registry and write metadata."""
+    return write_registry_entry(
+        model_key="yolo",
+        version=version,
+        dataset_version=dataset_version,
+        dataset_hash=dataset_hash,
+        metrics={"mAP@0.5": map50},
+        weights_src=checkpoint,
+        weights_name="yolov8_tumor.pt",
+        registry_root=registry_root,
+        i_know=i_know,
+        source_checkpoint=str(checkpoint),
     )
-    return out_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -73,15 +50,22 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=_PROJECT_ROOT / "registry",
     )
+    parser.add_argument("--i-know", action="store_true", help="Allow v1.0.0")
     args = parser.parse_args(argv)
-    out = promote_yolo(
-        checkpoint=args.checkpoint,
-        version=args.version,
-        dataset_version=args.dataset_version,
-        dataset_hash=args.dataset_hash,
-        map50=args.map50,
-        registry_root=args.registry_root,
-    )
+
+    try:
+        out = promote_yolo(
+            checkpoint=args.checkpoint,
+            version=args.version,
+            dataset_version=args.dataset_version,
+            dataset_hash=args.dataset_hash,
+            map50=args.map50,
+            registry_root=args.registry_root,
+            i_know=args.i_know,
+        )
+    except RegistryGuardError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     print(f"Promoted YOLO to {out}")
     return 0
 

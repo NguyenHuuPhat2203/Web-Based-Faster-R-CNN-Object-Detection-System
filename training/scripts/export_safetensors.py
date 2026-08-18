@@ -4,31 +4,27 @@
 from __future__ import annotations
 
 import argparse
-import json
-import subprocess
-from datetime import UTC, datetime
+import sys
 from pathlib import Path
 
 import torch
 from safetensors.torch import save_file
 
+from training.scripts.registry import RegistryGuardError, write_registry_entry
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _git_commit() -> str:
-    """Return current git commit hash or 'unknown'."""
-    try:
-        return (
-            subprocess.check_output(
-                ["git", "rev-parse", "HEAD"],
-                cwd=_PROJECT_ROOT,
-                stderr=subprocess.DEVNULL,
-            )
-            .decode()
-            .strip()
-        )
-    except Exception:
-        return "unknown"
+def _convert_to_safetensors(src: Path, dest: Path) -> None:
+    """Load a torch checkpoint and save it as safetensors."""
+    state = torch.load(src, map_location="cpu", weights_only=True)
+    if isinstance(state, dict) and "state_dict" in state:
+        state = state["state_dict"]
+    if isinstance(state, dict) and "model" in state:
+        state = state["model"]
+    # safetensors requires contiguous CPU tensors
+    clean = {k: v.contiguous().cpu() for k, v in state.items()}
+    save_file(clean, str(dest))
 
 
 def export_and_promote(
@@ -40,43 +36,26 @@ def export_and_promote(
     map50: float | None,
     map5095: float | None,
     registry_root: Path,
+    i_know: bool = False,
 ) -> Path:
-    """Convert checkpoint to safetensors and write registry metadata.
+    """Convert a checkpoint to safetensors and write a registry entry.
 
     Returns:
         Path to the promoted ``model.safetensors``.
     """
-    state = torch.load(checkpoint, map_location="cpu", weights_only=True)
-    if isinstance(state, dict) and "state_dict" in state:
-        state = state["state_dict"]
-    if isinstance(state, dict) and "model" in state:
-        state = state["model"]
-
-    out_dir = registry_root / "faster_rcnn" / version
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "model.safetensors"
-    # safetensors requires contiguous CPU tensors
-    clean = {k: v.contiguous().cpu() for k, v in state.items()}
-    save_file(clean, str(out_path))
-
-    metadata = {
-        "model_type": "faster-rcnn",
-        "version": version,
-        "dataset_version": dataset_version,
-        "dataset_hash": dataset_hash,
-        "metrics": {
-            "mAP@0.5": map50,
-            "mAP@0.5:0.95": map5095,
-        },
-        "git_commit": _git_commit(),
-        "created_at": datetime.now(UTC).isoformat(),
-        "weights": out_path.name,
-        "source_checkpoint": str(checkpoint),
-    }
-    (out_dir / "metadata.json").write_text(
-        json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+    return write_registry_entry(
+        model_key="faster_rcnn",
+        version=version,
+        dataset_version=dataset_version,
+        dataset_hash=dataset_hash,
+        metrics={"mAP@0.5": map50, "mAP@0.5:0.95": map5095},
+        weights_src=checkpoint,
+        weights_name="model.safetensors",
+        convert=_convert_to_safetensors,
+        registry_root=registry_root,
+        i_know=i_know,
+        source_checkpoint=str(checkpoint),
     )
-    return out_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -93,17 +72,23 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=_PROJECT_ROOT / "registry",
     )
+    parser.add_argument("--i-know", action="store_true", help="Allow v1.0.0")
     args = parser.parse_args(argv)
 
-    out = export_and_promote(
-        checkpoint=args.checkpoint,
-        version=args.version,
-        dataset_version=args.dataset_version,
-        dataset_hash=args.dataset_hash,
-        map50=args.map50,
-        map5095=args.map5095,
-        registry_root=args.registry_root,
-    )
+    try:
+        out = export_and_promote(
+            checkpoint=args.checkpoint,
+            version=args.version,
+            dataset_version=args.dataset_version,
+            dataset_hash=args.dataset_hash,
+            map50=args.map50,
+            map5095=args.map5095,
+            registry_root=args.registry_root,
+            i_know=args.i_know,
+        )
+    except RegistryGuardError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     print(f"Promoted Faster R-CNN to {out}")
     return 0
 
