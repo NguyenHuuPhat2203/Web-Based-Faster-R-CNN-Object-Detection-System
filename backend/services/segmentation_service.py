@@ -1,50 +1,37 @@
-"""Live 3D segmentation service (SwinUNETR BRATS21 pretrained).
+"""Live 3D segmentation orchestration (SwinUNETR BRATS21 pretrained).
 
-Wraps ``ml.backbone.segment3d`` with a per-case in-memory cache so the
-~2-minute GPU inference runs once per case and the predicted mask is
-streamable for NiiVue overlay.
+Runs the model pipeline and hands results to the case store; holds no cache
+of its own. Unwired from the router while the smaller model trains on Colab —
+the store seam (``put_mask`` / ``mask_bytes``) is already in place.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import nibabel as nib
-import numpy as np
-
 from ml.backbone.segment3d import SwinUNETRSegmentor
 
-from ..config import get_settings
-
-# case_id -> (mask uint8 (D,H,W), affine, seconds)
-_cache: dict[str, tuple[np.ndarray, np.ndarray, float]] = {}
-
-
-def reset_segmentation_cache() -> None:
-    """Clear the in-memory predicted-mask cache (tests / cache invalidation)."""
-    _cache.clear()
+from . import case_store
 
 
 def segment_case(case_id: str) -> dict:
-    """Segment a case once; returns metrics (cached on repeat calls)."""
-    if case_id not in _cache:
-        case_dir = Path(get_settings().case_viewer_dir) / case_id
-        if not case_dir.is_dir():
-            raise ValueError(f"case {case_id} not found")
+    """Segment a case once; returns metrics (cached in the store on repeats)."""
+    case_dir = case_store.case_dir(case_id)
+    entry = case_store.get_mask(case_id)
+    if entry is None:
         mask, affine, seconds = SwinUNETRSegmentor.get().segment_volume(case_dir)
-        _cache[case_id] = (mask, affine, seconds)
-    mask, affine, seconds = _cache[case_id]
-    vols = SwinUNETRSegmentor.get().volumes_cm3(mask, affine)
+        case_store.put_mask(case_id, mask, affine, seconds)
+        entry = case_store.get_mask(case_id)
+    assert entry is not None
+    vols = SwinUNETRSegmentor.get().volumes_cm3(entry.mask, entry.affine)
     return {
         "case_id": case_id,
-        "seconds": round(seconds, 1),
+        "seconds": round(entry.seconds, 1),
         "volumes_cm3": {k: round(v, 1) for k, v in vols.items()},
     }
 
 
 def predicted_mask_bytes(case_id: str) -> bytes:
     """NIfTI bytes of the predicted mask (uncompressed, matches /volume loads)."""
-    if case_id not in _cache:
+    data = case_store.mask_bytes(case_id)
+    if data is None:
         raise KeyError(case_id)
-    mask, affine, _ = _cache[case_id]
-    return nib.Nifti1Image(mask, affine).to_bytes()
+    return data

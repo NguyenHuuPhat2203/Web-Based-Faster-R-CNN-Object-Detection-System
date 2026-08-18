@@ -8,6 +8,9 @@ from fastapi.testclient import TestClient
 
 from backend.services import segmentation_service
 
+# segment3d (SwinUNETR) temporarily unwired — /segment endpoint removed.
+pytestmark = pytest.mark.skip(reason="segment3d temporarily unwired")
+
 
 class _FakeSegmentor:
     """Stand-in for SwinUNETRSegmentor: instant, deterministic mask."""
@@ -45,7 +48,7 @@ def _fake_segmentor(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def case_dir(tmp_path, monkeypatch: pytest.MonkeyPatch) -> str:
     """Synthetic case dir + settings pointed at it."""
-    from backend.services import case_viewer_service
+    from backend.services import case_store
 
     root = tmp_path / "cases"
     root.mkdir()
@@ -53,7 +56,7 @@ def case_dir(tmp_path, monkeypatch: pytest.MonkeyPatch) -> str:
     case.mkdir()
     (case / "BraTS2021_00001_t1ce.nii.gz").write_bytes(b"x")
     (case / "BraTS2021_00001_seg.nii.gz").write_bytes(b"x")
-    case_viewer_service.reset_case_viewer_cache()
+    case_store.reset_case_store_cache()
 
     class _Settings:
         case_viewer_dir = str(root)

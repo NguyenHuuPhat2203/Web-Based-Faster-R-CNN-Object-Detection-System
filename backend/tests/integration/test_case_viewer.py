@@ -28,18 +28,18 @@ def _make_case(root, name: str = "BraTS2021_00001") -> str:
 
 @pytest.fixture
 def case_dir(tmp_path, monkeypatch: pytest.MonkeyPatch) -> str:
-    """Point the router at a synthetic case and reset the service cache."""
-    from backend.services import case_viewer_service
+    """Point the router at a synthetic case and reset the store cache."""
+    from backend.services import case_store
 
     root = tmp_path / "cases"
     root.mkdir()
     case_dir = _make_case(root)
-    case_viewer_service.reset_case_viewer_cache()
+    case_store.reset_case_store_cache()
 
     class _Settings:
         case_viewer_dir = str(root)
 
-    monkeypatch.setattr(case_viewer_router, "get_settings", lambda: _Settings())
+    monkeypatch.setattr(case_store, "get_settings", lambda: _Settings())
     return case_dir
 
 
