@@ -5,10 +5,8 @@ import io
 from PIL import Image as PILImage
 
 from backend.models import User
-from backend.services.scan_persistence_service import (
-    DetectionRecord,
-    ScanPersistenceService,
-)
+from backend.services.scan_persistence_service import ScanPersistenceService
+from ml.core.entities import Detection
 
 
 class TestScanPersistenceService:
@@ -37,7 +35,6 @@ class TestScanPersistenceService:
         service = ScanPersistenceService(db_session)
         image = service.save_scan_result(
             user=user,
-            pil_image=pil_image,
             contents=contents,
             original_name="scan.png",
             content_type="image/png",
@@ -45,7 +42,7 @@ class TestScanPersistenceService:
             model_type="faster-rcnn",
             model_version="test",
             detections=[
-                DetectionRecord(
+                Detection(
                     box=[1.0, 2.0, 10.0, 12.0],
                     label=1,
                     score=0.9,

@@ -1,4 +1,4 @@
-"""Unit tests for OOM -> CPU fallback in both inference pipelines."""
+"""Unit tests for OOM -> CPU fallback in the inference engine."""
 
 from __future__ import annotations
 
@@ -8,8 +8,7 @@ import pytest
 import torch
 from PIL import Image as PILImage
 
-from backend.pipeline.faster_rcnn_pipeline import run_faster_rcnn
-from backend.pipeline.yolo_pipeline import run_yolo
+from backend.pipeline.inference import InferenceEngine, ModelAdapter, RawDetections
 
 
 def _png_bytes(size: int = 64) -> bytes:
@@ -20,104 +19,84 @@ def _png_bytes(size: int = 64) -> bytes:
     return buf.getvalue()
 
 
-def test_frcnn_falls_back_to_cpu_after_oom(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Two GPU OOMs must trigger a fresh CPU forward instead of raising."""
-    import backend.pipeline.faster_rcnn_pipeline as mod
+class _OOMAdapter(ModelAdapter):
+    """Raise OOM twice, then return one detection."""
 
-    calls = {"forwards": 0, "cpu_load": False}
+    model_type = "faster-rcnn"
+    model_version = "test"
+    class_names = {1: "Brain tumor"}
 
-    class Dummy:
-        pass
+    def __init__(self) -> None:
+        self.calls = 0
+        self.devices: list[str] = []
 
-    dummy = Dummy()
-
-    def fake_load(**kwargs):
-        if kwargs.get("device") == "cpu":
-            calls["cpu_load"] = True
-        return dummy
-
-    def fake_load_model_and_gradcam():
-        return dummy, None
-
-    def fake_forward(model, image_tensor):
-        calls["forwards"] += 1
-        if calls["forwards"] <= 2:
+    def forward(self, image, device) -> RawDetections:
+        self.calls += 1
+        self.devices.append(str(device))
+        if self.calls <= 2:
             raise torch.cuda.OutOfMemoryError("simulated OOM")
-        return [
-            {
-                "boxes": torch.tensor([[10.0, 20.0, 100.0, 120.0]]),
-                "scores": torch.tensor([0.9]),
-                "labels": torch.tensor([1]),
-            }
-        ]
+        return RawDetections(
+            boxes=torch.tensor([[10.0, 20.0, 100.0, 120.0]]),
+            scores=torch.tensor([0.9]),
+            labels=torch.tensor([1]),
+        )
 
-    monkeypatch.setattr(mod, "load_faster_rcnn", fake_load)
-    monkeypatch.setattr(mod, "_load_model_and_gradcam", fake_load_model_and_gradcam)
-    monkeypatch.setattr(mod, "_forward", fake_forward)
 
-    pil_image, result = run_faster_rcnn(_png_bytes(), threshold=0.5, explain=True)
+def test_engine_falls_back_to_cpu_after_oom(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two GPU OOMs must trigger a fresh CPU forward instead of raising."""
+    monkeypatch.setattr(
+        "backend.pipeline.inference.get_device", lambda: torch.device("cuda")
+    )
 
-    assert calls["forwards"] == 3  # 2 GPU attempts + 1 CPU fallback
-    assert calls["cpu_load"] is True
+    adapter = _OOMAdapter()
+    result = InferenceEngine(adapter).run(_png_bytes(), score_floor=0.5, explain=True)
+
+    assert adapter.calls == 3  # 2 GPU attempts + 1 CPU fallback
+    assert adapter.devices[-1] == "cpu"
     assert len(result.detections) == 1
-    assert result.heatmap is None  # Grad-CAM skipped in fallback
+    assert result.heatmap is None  # explain skipped after CPU fallback
 
 
-def test_frcnn_still_raises_on_non_oom(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Non-OOM failures keep raising (v2 INFERENCE_FAILED path)."""
-    import backend.pipeline.faster_rcnn_pipeline as mod
+def test_engine_reraises_non_oom(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-OOM failures keep raising."""
 
-    class Dummy:
-        pass
+    class _ExplodingAdapter(ModelAdapter):
+        def forward(self, image, device) -> RawDetections:
+            raise RuntimeError("model exploded")
 
-    def fake_load_model_and_gradcam():
-        return Dummy(), None
-
-    def fake_forward(model, image_tensor):
-        raise RuntimeError("model exploded")
-
-    monkeypatch.setattr(mod, "_load_model_and_gradcam", fake_load_model_and_gradcam)
-    monkeypatch.setattr(mod, "_forward", fake_forward)
+    monkeypatch.setattr(
+        "backend.pipeline.inference.get_device", lambda: torch.device("cuda")
+    )
 
     with pytest.raises(RuntimeError, match="model exploded"):
-        run_faster_rcnn(_png_bytes())
+        InferenceEngine(_ExplodingAdapter()).run(_png_bytes())
 
 
-def test_yolo_falls_back_to_cpu_after_oom(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Two OOMs must trigger a fresh CPU YOLO forward instead of raising."""
-    import backend.pipeline.yolo_pipeline as mod
+def test_frcnn_adapter_loads_fresh_cpu_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A1 invariant: CPU fallback loads an uncached model (use_cache=False)."""
+    import backend.pipeline.adapters as adapters
 
-    calls = {"forwards": 0}
+    calls: list[tuple] = []
 
-    class DummyBoxes:
-        xyxy = torch.tensor([[10.0, 20.0, 100.0, 120.0]])
-        conf = torch.tensor([0.9])
-        cls = torch.tensor([0])
+    class _DummyModel:
+        def __call__(self, tensor):
+            return [
+                {
+                    "boxes": torch.tensor([[0.0, 0.0, 1.0, 1.0]]),
+                    "scores": torch.tensor([0.9]),
+                    "labels": torch.tensor([1]),
+                }
+            ]
 
-        def __len__(self):
-            return 1
+    def fake_load(**kwargs):
+        calls.append((kwargs.get("device"), kwargs.get("use_cache")))
+        return _DummyModel()
 
-    class DummyResult:
-        boxes = DummyBoxes()
+    monkeypatch.setattr(adapters, "load_faster_rcnn", fake_load)
 
-    class DummyModel:
-        names = {0: "Brain tumor"}
+    adapter = adapters.FasterRCNNAdapter()
+    adapter.forward(PILImage.new("RGB", (8, 8)), torch.device("cpu"))
 
-        def to(self, device):
-            return self
-
-        def __call__(self, *args, **kwargs):
-            calls["forwards"] += 1
-            if calls["forwards"] <= 2:
-                raise torch.cuda.OutOfMemoryError("simulated OOM")
-            return [DummyResult()]
-
-    dummy = DummyModel()
-
-    monkeypatch.setattr(mod, "load_yolo", lambda **kwargs: dummy)
-    monkeypatch.setattr(mod, "get_class_names", lambda: {0: "Brain tumor"})
-
-    pil_image, result = run_yolo(_png_bytes(), threshold=0.5)
-
-    assert calls["forwards"] == 3  # 2 GPU attempts + 1 CPU fallback
-    assert len(result.detections) == 1
+    assert calls[-1] == (torch.device("cpu"), False)

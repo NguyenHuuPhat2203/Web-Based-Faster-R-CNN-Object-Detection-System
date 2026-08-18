@@ -33,14 +33,15 @@ async def predict_v2(
     contents = await file.read()
     validate_image_upload(content_type=file.content_type, size_bytes=len(contents))
     try:
-        result = PredictionService(db).run_faster_rcnn(
+        result = PredictionService(db).run(
+            model_type="faster-rcnn",
             user=current_user,
             contents=contents,
             original_name=file.filename,
             content_type=file.content_type,
+            score_floor=0.1,
             threshold=threshold,
             explain=explain,
-            min_score=0.1,
         )
         return InferenceItemOk(result=result)
     except DomainError:
@@ -62,13 +63,14 @@ async def predict_yolo_v2(
     contents = await file.read()
     validate_image_upload(content_type=file.content_type, size_bytes=len(contents))
     try:
-        result = PredictionService(db).run_yolo(
+        result = PredictionService(db).run(
+            model_type="yolov8",
             user=current_user,
             contents=contents,
             original_name=file.filename,
             content_type=file.content_type,
+            score_floor=0.1,
             threshold=threshold,
-            min_score=0.1,
         )
         return InferenceItemOk(result=result)
     except DomainError:

@@ -69,21 +69,19 @@ class TestPredict:
         test_image_bytes: bytes,
         monkeypatch,
     ) -> None:
-        """v1 keeps server-side filtering: no min_score floor is passed."""
+        """v1 keeps server-side filtering: score_floor equals the threshold."""
         captured: dict = {}
-        original = PredictionService.run_faster_rcnn
+        original = PredictionService.run
 
         def spy(self, **kwargs):
             captured.update(kwargs)
             return original(self, **kwargs)
 
-        monkeypatch.setattr(PredictionService, "run_faster_rcnn", spy)
+        monkeypatch.setattr(PredictionService, "run", spy)
         response = client.post(
             "/predict",
             files={"file": ("scan.png", test_image_bytes, "image/png")},
             headers=auth_headers,
         )
         assert response.status_code == 200
-        assert (
-            captured.get("min_score") is None
-        )  # not passed -> server-side filter stays
+        assert captured.get("score_floor") == 0.5  # default threshold, server filters

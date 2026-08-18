@@ -3,45 +3,30 @@
 from __future__ import annotations
 
 import torch
-from torchvision.ops import nms
 
 from ml.core.constants import FRCNN_CLASS_NAMES
 from ml.core.entities import InferenceResult
 
 
-def filter_by_threshold(
+def filter_above_floor(
     boxes: torch.Tensor,
     scores: torch.Tensor,
     labels: torch.Tensor,
     *,
-    threshold: float,
+    floor: float,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Keep detections with score above threshold.
+    """Keep detections with score at or above the floor.
 
     Args:
         boxes: Boxes tensor ``[N, 4]`` in xyxy format.
         scores: Confidence scores ``[N]``.
         labels: Class indices ``[N]``.
-        threshold: Minimum confidence.
+        floor: Minimum confidence to return.
 
     Returns:
         Filtered ``(boxes, scores, labels)`` tensors.
     """
-    keep = scores > threshold
-    return boxes[keep], scores[keep], labels[keep]
-
-
-def apply_nms(
-    boxes: torch.Tensor,
-    scores: torch.Tensor,
-    labels: torch.Tensor,
-    *,
-    iou_threshold: float = 0.5,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Apply class-agnostic NMS and return surviving detections."""
-    if boxes.numel() == 0:
-        return boxes, scores, labels
-    keep = nms(boxes, scores, iou_threshold)
+    keep = scores >= floor
     return boxes[keep], scores[keep], labels[keep]
 
 

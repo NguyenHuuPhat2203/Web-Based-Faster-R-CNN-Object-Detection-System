@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 from ml.backbone.faster_rcnn import create_faster_rcnn, reset_model_cache
-from ml.core.postprocess import filter_by_threshold, tensors_to_inference_result
+from ml.core.postprocess import filter_above_floor, tensors_to_inference_result
 
 
 class _TinyDetectionDataset(Dataset):
@@ -136,8 +136,8 @@ def test_postprocess_golden_values() -> None:
     scores = torch.tensor([0.91, 0.42], dtype=torch.float32)
     labels = torch.tensor([1, 2], dtype=torch.int64)
 
-    filtered_boxes, filtered_scores, filtered_labels = filter_by_threshold(
-        boxes, scores, labels, threshold=0.5
+    filtered_boxes, filtered_scores, filtered_labels = filter_above_floor(
+        boxes, scores, labels, floor=0.5
     )
     result = tensors_to_inference_result(
         filtered_boxes,

@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import io
 from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from PIL import Image as PILImage
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import backend.core.database as database_module
-from ml.core.entities import InferenceResult
 
 TEST_ENGINE = create_engine(
     "sqlite://",
@@ -26,49 +23,6 @@ database_module.SessionLocal = TEST_SESSION
 
 from backend.core.database import Base, get_db  # noqa: E402
 from backend.main import app  # noqa: E402
-
-
-@pytest.fixture(autouse=True)
-def mock_ml_models(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Avoid loading real torch checkpoints during HTTP integration tests."""
-
-    def _mock_run_frcnn(
-        contents: bytes,
-        *,
-        threshold: float = 0.5,
-        explain: bool = True,
-        min_score: float | None = None,
-    ):
-        pil = PILImage.open(io.BytesIO(contents)).convert("RGB")
-        return pil, InferenceResult(
-            model_type="faster-rcnn",
-            model_version="resnet50-fpn-v1",
-            boxes=[[10, 20, 100, 120], [30, 40, 90, 110]],
-            labels=[1, 1],
-            scores=[0.9, 0.3],
-            label_names=["Brain tumor", "Brain tumor"],
-        )
-
-    def _mock_run_yolo(
-        contents: bytes,
-        *,
-        threshold: float = 0.5,
-        min_score: float | None = None,
-    ):
-        pil = PILImage.open(io.BytesIO(contents)).convert("RGB")
-        return pil, InferenceResult(
-            model_type="yolov8",
-            model_version="yolov8n",
-            boxes=[[10, 20, 100, 120], [30, 40, 90, 110]],
-            labels=[1, 1],
-            scores=[0.9, 0.3],
-            label_names=["Brain tumor", "Brain tumor"],
-        )
-
-    monkeypatch.setattr(
-        "backend.services.prediction_service.run_faster_rcnn", _mock_run_frcnn
-    )
-    monkeypatch.setattr("backend.services.prediction_service.run_yolo", _mock_run_yolo)
 
 
 def override_get_db() -> Generator:

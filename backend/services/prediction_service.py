@@ -7,12 +7,15 @@ from sqlalchemy.orm import Session
 from ml.core.entities import InferenceResult
 
 from ..models import User
-from ..pipeline import run_faster_rcnn, run_yolo
+from ..pipeline.adapters import FasterRCNNAdapter, YoloAdapter
+from ..pipeline.inference import InferenceEngine
 from ..schemas.prediction import PredictionResult
-from .scan_persistence_service import (
-    DetectionRecord,
-    ScanPersistenceService,
-)
+from .scan_persistence_service import ScanPersistenceService
+
+_ADAPTERS = {
+    "faster-rcnn": FasterRCNNAdapter(),
+    "yolov8": YoloAdapter(),
+}
 
 
 class PredictionService:
@@ -35,79 +38,40 @@ class PredictionService:
             model_version=result.model_version,
         )
 
-    def run_faster_rcnn(
+    def run(
         self,
         *,
+        model_type: str,
         user: User,
         contents: bytes,
         original_name: str | None,
         content_type: str | None,
-        threshold: float,
-        explain: bool = True,
-        min_score: float | None = None,
+        score_floor: float,
+        threshold: float | None = None,
+        explain: bool = False,
     ) -> PredictionResult:
-        """Run Faster R-CNN inference on an uploaded image.
+        """Run inference for a model type, persist, and map to the HTTP schema.
 
         Args:
+            model_type: ``"faster-rcnn"`` or ``"yolov8"``.
             user: Authenticated user instance.
             contents: Raw image bytes.
             original_name: Original client filename.
             content_type: MIME type reported by the client.
-            threshold: Confidence threshold (v1 server-side filter; v2 slider default).
-            explain: Compute Grad-CAM when True (v1 default).
-            min_score: When set, detections are returned down to this floor (v2).
-
-        Returns:
-            Prediction response including optional Grad-CAM heatmap.
+            score_floor: Minimum confidence the server returns.
+            threshold: Client-visible threshold, persisted as metadata only.
+            explain: Compute Grad-CAM when True (Faster R-CNN only).
         """
-        pil_image, result = run_faster_rcnn(
-            contents,
-            threshold=threshold,
-            explain=explain,
-            min_score=min_score,
+        adapter = _ADAPTERS[model_type]
+        result = InferenceEngine(adapter).run(
+            contents, score_floor=score_floor, explain=explain
         )
         self._persist(
             user=user,
-            pil_image=pil_image,
             contents=contents,
             original_name=original_name,
             content_type=content_type,
-            threshold=threshold,
-            result=result,
-        )
-        return self._to_response(result)
-
-    def run_yolo(
-        self,
-        *,
-        user: User,
-        contents: bytes,
-        original_name: str | None,
-        content_type: str | None,
-        threshold: float,
-        min_score: float | None = None,
-    ) -> PredictionResult:
-        """Run YOLOv8 inference on an uploaded image.
-
-        Args:
-            user: Authenticated user instance.
-            contents: Raw image bytes.
-            original_name: Original client filename.
-            content_type: MIME type reported by the client.
-            threshold: Confidence threshold (v1 server-side filter; v2 slider default).
-            min_score: When set, detections are returned down to this floor (v2).
-
-        Returns:
-            Prediction response without heatmap data.
-        """
-        pil_image, result = run_yolo(contents, threshold=threshold, min_score=min_score)
-        self._persist(
-            user=user,
-            pil_image=pil_image,
-            contents=contents,
-            original_name=original_name,
-            content_type=content_type,
-            threshold=threshold,
+            threshold=threshold if threshold is not None else score_floor,
             result=result,
         )
         return self._to_response(result)
@@ -116,7 +80,6 @@ class PredictionService:
         self,
         *,
         user: User,
-        pil_image,
         contents: bytes,
         original_name: str | None,
         content_type: str | None,
@@ -124,23 +87,13 @@ class PredictionService:
         result: InferenceResult,
     ) -> None:
         """Persist scan detections for the authenticated user."""
-        detection_records = [
-            DetectionRecord(
-                box=det.box,
-                label=det.label,
-                score=det.score,
-                label_name=det.label_name,
-            )
-            for det in result.detections
-        ]
         self.persistence.save_scan_result(
             user=user,
-            pil_image=pil_image,
             contents=contents,
             original_name=original_name,
             content_type=content_type,
             threshold=threshold,
             model_type=result.model_type,
             model_version=result.model_version,
-            detections=detection_records,
+            detections=result.detections,
         )

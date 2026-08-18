@@ -9,8 +9,7 @@ from ml.core.constants import (
 )
 from ml.core.entities import Detection, InferenceResult
 from ml.core.postprocess import (
-    apply_nms,
-    filter_by_threshold,
+    filter_above_floor,
     tensors_to_inference_result,
 )
 
@@ -22,7 +21,6 @@ __all__ = [
     "YOLO_MODEL_VERSION",
     "Detection",
     "InferenceResult",
-    "apply_nms",
-    "filter_by_threshold",
+    "filter_above_floor",
     "tensors_to_inference_result",
 ]
