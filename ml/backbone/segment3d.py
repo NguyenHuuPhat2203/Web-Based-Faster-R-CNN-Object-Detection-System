@@ -18,13 +18,14 @@ import torch
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import SwinUNETR
 
+from ml.core.labels import BY_CHANNEL, BY_LABEL, REGIONS
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_WEIGHTS = (
     _REPO_ROOT / ".weights" / "fold0_f48_ep300_4gpu_dice0_8854" / "model.pt"
 )
 
 _MODALITIES = ("flair", "t1", "t1ce", "t2")
-_LABELS = {1: "NCR", 2: "ED", 4: "ET"}
 
 # ponytail: naive 128^3 sliding window, sw_batch 1 -> ~55s on RTX 3050 Ti 4GB,
 # ~6min CPU. Faster paths (bigger sw_batch / overlap 0.5) later if needed.
@@ -129,9 +130,8 @@ class SwinUNETRSegmentor:
         prob_np = prob[0].detach().cpu().numpy()  # (3, D, H, W)
         binary = prob_np > 0.5
         mask = np.zeros(binary.shape[1:], dtype=np.uint8)
-        mask[binary[0]] = 1  # channel 0 = NCR
-        mask[binary[1]] = 2  # channel 1 = ED
-        mask[binary[2]] = 4  # channel 2 = ET
+        for channel, region in BY_CHANNEL.items():
+            mask[binary[channel]] = region.label
         return mask, affine, seconds
 
     def volumes_cm3(self, mask: np.ndarray, affine: np.ndarray) -> dict[str, float]:
@@ -139,8 +139,8 @@ class SwinUNETRSegmentor:
         spacing = np.linalg.norm(affine[:3, :3], axis=0)
         voxel_cm3 = float(np.prod(spacing) / 1000.0)
         return {
-            name: float(np.sum(mask == label)) * voxel_cm3
-            for label, name in _LABELS.items()
+            region.name: float(np.sum(mask == region.label)) * voxel_cm3
+            for region in REGIONS
         }
 
 
@@ -181,8 +181,8 @@ if __name__ == "__main__":
         print(
             "dice vs expert:",
             {
-                name: round(dice(seg == lab, gt == lab), 3)
-                for lab, name in _LABELS.items()
+                region.name: round(dice(seg == region.label, gt == region.label), 3)
+                for region in REGIONS
             },
             "| whole:",
             round(dice(seg, gt), 3),

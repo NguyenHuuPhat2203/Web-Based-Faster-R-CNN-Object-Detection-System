@@ -16,13 +16,15 @@ import nibabel as nib
 import numpy as np
 from PIL import Image
 
+from ml.core.labels import BY_LABEL
+
 # Region colors (RGBA overlay) — ET red, ED green, NCR amber.
 REGION_COLORS: dict[int, tuple[int, int, int]] = {
-    1: (245, 158, 11),  # NCR — amber
-    2: (16, 185, 129),  # ED — emerald
-    4: (239, 68, 68),  # ET — red
+    region.label: region.color for region in BY_LABEL.values()
 }
-REGION_NAMES: dict[int, str] = {1: "NCR", 2: "ED", 4: "ET"}
+REGION_NAMES: dict[int, str] = {
+    region.label: region.name for region in BY_LABEL.values()
+}
 
 _SEG_SUFFIX = "_seg.nii.gz"
 _BASE_SUFFIX = "_t1ce.nii.gz"
