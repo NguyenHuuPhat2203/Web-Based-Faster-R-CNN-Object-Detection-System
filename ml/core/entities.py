@@ -15,6 +15,23 @@ class Detection:
     label_name: str
 
 
+@dataclass(frozen=True)
+class Scan:
+    """An uploaded MRI image plus its detections (the persisted artifact).
+
+    Ownership lives at the persistence seam (``save(user, scan)``), not in
+    the artifact itself.
+    """
+
+    contents: bytes
+    original_name: str | None
+    content_type: str | None
+    threshold: float
+    model_type: str
+    model_version: str
+    detections: list[Detection]
+
+
 @dataclass
 class InferenceResult:
     """Model inference output before HTTP serialization."""

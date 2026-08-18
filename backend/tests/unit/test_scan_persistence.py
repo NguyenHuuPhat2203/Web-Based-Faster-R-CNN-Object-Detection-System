@@ -6,7 +6,7 @@ from PIL import Image as PILImage
 
 from backend.models import User
 from backend.services.scan_persistence_service import ScanPersistenceService
-from ml.core.entities import Detection
+from ml.core.entities import Detection, Scan
 
 
 class TestScanPersistenceService:
@@ -33,8 +33,7 @@ class TestScanPersistenceService:
         contents = buffer.getvalue()
 
         service = ScanPersistenceService(db_session)
-        image = service.save_scan_result(
-            user=user,
+        scan = Scan(
             contents=contents,
             original_name="scan.png",
             content_type="image/png",
@@ -50,6 +49,7 @@ class TestScanPersistenceService:
                 )
             ],
         )
+        image = service.save_scan_result(user=user, scan=scan)
 
         assert image.id is not None
         assert len(image.detections) == 1

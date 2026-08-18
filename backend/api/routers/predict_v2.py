@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ...core.database import get_db
 from ...core.exceptions import DomainError
 from ...models import User
+from ...pipeline.adapters import DEFAULT_ADAPTERS
 from ...schemas.prediction import InferenceItemError, InferenceItemOk, ItemError
 from ...services.file_validation import validate_image_upload
 from ...services.prediction_service import PredictionService
@@ -33,7 +34,7 @@ async def predict_v2(
     contents = await file.read()
     validate_image_upload(content_type=file.content_type, size_bytes=len(contents))
     try:
-        result = PredictionService(db).run(
+        result = PredictionService(db, DEFAULT_ADAPTERS).run(
             model_type="faster-rcnn",
             user=current_user,
             contents=contents,
@@ -63,7 +64,7 @@ async def predict_yolo_v2(
     contents = await file.read()
     validate_image_upload(content_type=file.content_type, size_bytes=len(contents))
     try:
-        result = PredictionService(db).run(
+        result = PredictionService(db, DEFAULT_ADAPTERS).run(
             model_type="yolov8",
             user=current_user,
             contents=contents,

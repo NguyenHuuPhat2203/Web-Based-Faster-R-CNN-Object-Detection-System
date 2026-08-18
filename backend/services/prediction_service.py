@@ -4,26 +4,21 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from ml.core.entities import InferenceResult
+from ml.core.entities import InferenceResult, Scan
 
 from ..models import User
-from ..pipeline.adapters import FasterRCNNAdapter, YoloAdapter
-from ..pipeline.inference import InferenceEngine
+from ..pipeline.inference import InferenceEngine, ModelAdapter
 from ..schemas.prediction import PredictionResult
 from .scan_persistence_service import ScanPersistenceService
-
-_ADAPTERS = {
-    "faster-rcnn": FasterRCNNAdapter(),
-    "yolov8": YoloAdapter(),
-}
 
 
 class PredictionService:
     """Run inference and persist scan results."""
 
-    def __init__(self, db: Session) -> None:
-        """Initialize the service with a database session."""
+    def __init__(self, db: Session, adapters: dict[str, ModelAdapter]) -> None:
+        """Initialize the service with a database session and injected adapters."""
         self.persistence = ScanPersistenceService(db)
+        self.adapters = adapters
 
     @staticmethod
     def _to_response(result: InferenceResult) -> PredictionResult:
@@ -62,38 +57,22 @@ class PredictionService:
             threshold: Client-visible threshold, persisted as metadata only.
             explain: Compute Grad-CAM when True (Faster R-CNN only).
         """
-        adapter = _ADAPTERS[model_type]
+        adapter = self.adapters[model_type]
         result = InferenceEngine(adapter).run(
             contents, score_floor=score_floor, explain=explain
         )
-        self._persist(
-            user=user,
+        scan = Scan(
             contents=contents,
             original_name=original_name,
             content_type=content_type,
             threshold=threshold if threshold is not None else score_floor,
-            result=result,
-        )
-        return self._to_response(result)
-
-    def _persist(
-        self,
-        *,
-        user: User,
-        contents: bytes,
-        original_name: str | None,
-        content_type: str | None,
-        threshold: float,
-        result: InferenceResult,
-    ) -> None:
-        """Persist scan detections for the authenticated user."""
-        self.persistence.save_scan_result(
-            user=user,
-            contents=contents,
-            original_name=original_name,
-            content_type=content_type,
-            threshold=threshold,
             model_type=result.model_type,
             model_version=result.model_version,
             detections=result.detections,
         )
+        self._persist(user=user, scan=scan)
+        return self._to_response(result)
+
+    def _persist(self, *, user: User, scan: Scan) -> None:
+        """Persist a scan for the authenticated user."""
+        self.persistence.save_scan_result(user=user, scan=scan)

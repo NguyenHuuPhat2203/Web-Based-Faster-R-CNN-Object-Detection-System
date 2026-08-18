@@ -103,3 +103,9 @@ class YoloAdapter(ModelAdapter):
             scores=boxes.conf.cpu().clone(),
             labels=boxes.cls.int().cpu().clone(),
         )
+
+
+DEFAULT_ADAPTERS: dict[str, ModelAdapter] = {
+    "faster-rcnn": FasterRCNNAdapter(),
+    "yolov8": YoloAdapter(),
+}

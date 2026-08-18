@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...models import User
+from ...pipeline.adapters import DEFAULT_ADAPTERS
 from ...schemas.prediction import PredictionResult
 from ...services.file_validation import validate_image_upload
 from ...services.prediction_service import PredictionService
@@ -27,7 +28,7 @@ async def predict_yolo(
     """Run YOLOv8 inference on an uploaded MRI image."""
     contents = await file.read()
     validate_image_upload(content_type=file.content_type, size_bytes=len(contents))
-    return PredictionService(db).run(
+    return PredictionService(db, DEFAULT_ADAPTERS).run(
         model_type="yolov8",
         user=current_user,
         contents=contents,
