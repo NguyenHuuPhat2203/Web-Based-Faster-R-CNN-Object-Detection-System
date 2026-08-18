@@ -18,7 +18,7 @@ import torch
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import SwinUNETR
 
-from ml.core.labels import BY_CHANNEL, BY_LABEL, REGIONS
+from ml.core.labels import BY_CHANNEL, REGIONS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_WEIGHTS = (

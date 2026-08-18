@@ -9,8 +9,6 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-import backend.api.routers.case_viewer as case_viewer_router
-
 
 def _make_case(root, name: str = "BraTS2021_00001") -> str:
     case_dir = root / name
