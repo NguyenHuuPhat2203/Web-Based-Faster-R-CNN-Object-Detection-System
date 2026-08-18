@@ -7,7 +7,7 @@ from ml.core.constants import (
     FRCNN_NUM_CLASSES,
     YOLO_MODEL_VERSION,
 )
-from ml.core.entities import Detection, InferenceResult
+from ml.core.entities import Detection, InferenceResult, Scan
 from ml.core.postprocess import (
     filter_above_floor,
     tensors_to_inference_result,
@@ -21,6 +21,7 @@ __all__ = [
     "YOLO_MODEL_VERSION",
     "Detection",
     "InferenceResult",
+    "Scan",
     "filter_above_floor",
     "tensors_to_inference_result",
 ]
