@@ -14,6 +14,8 @@ ignore = ["D104", "B008"]
 "backend/alembic/versions/*.py" = ["D103", "D415", "E501"]
 # training scripts set up sys.path / argparse before module-level imports (deliberate)
 "training/scripts/*.py" = ["E402"]
+# notebook is deliberately docstring-free per the training-notebook spec
+"training/notebooks/*.ipynb" = ["D100", "D101", "D102", "D103", "D107"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
