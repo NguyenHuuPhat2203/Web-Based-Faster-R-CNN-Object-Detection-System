@@ -1,12 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
-  Upload, AlertCircle, Download, Sliders,
-  Image as ImageIcon, RotateCcw, Camera, Cpu, FileText,
-  Thermometer, Ruler, Eye, CheckCircle,
-  Brain, Activity, Server, Wifi,
+  Upload, AlertCircle, Sliders, RotateCcw, Camera, Cpu, FileText,
+  CheckCircle, Brain, Activity, Server, Wifi,
 } from "lucide-react";
 import { WebcamCapture } from "./WebcamCapture";
-import { drawScan } from "../lib/drawScan";
+import { ScanViewer } from "./ScanViewer";
 import {
   predict,
   getReportUrl,
@@ -31,12 +29,6 @@ const MODELS: { value: ModelType; label: string }[] = [
 
 /* ---------- Types ---------- */
 
-type ViewMode = "original" | "annotated" | "split";
-
-interface Measurement {
-  x1: number; y1: number; x2: number; y2: number;
-}
-
 export function Detector() {
   // -- Mode --
   const [useWebcam, setUseWebcam] = useState(false);
@@ -52,21 +44,9 @@ export function Detector() {
   const [latestImageId, setLatestImageId] = useState<number | null>(null);
   const [imageFileName, setImageFileName] = useState<string>("");
 
-  // -- View mode --
-  const [viewMode, setViewMode] = useState<ViewMode>("annotated");
-  const [showHeatmap, setShowHeatmap] = useState(false);
-
-  // -- Measurement tool --
-  const [measuring, setMeasuring] = useState(false);
-  const [measurements, setMeasurements] = useState<Measurement[]>([]);
-  const [measureStart, setMeasureStart] = useState<{ x: number; y: number } | null>(null);
-
   // -- Drag-and-drop --
   const [isDragging, setIsDragging] = useState(false);
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
-  const heatmapImgRef = useRef<HTMLImageElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   /* ---------- File handling ---------- */
@@ -77,8 +57,6 @@ export function Detector() {
     setResults(null);
     setDetectError("");
     setLatestImageId(null);
-    setMeasurements([]);
-    setShowHeatmap(false);
     setImageFileName(file.name);
   }, []);
 
@@ -100,62 +78,6 @@ export function Detector() {
   };
 
 
-  const renderCanvas = useCallback(() => {
-    if (!canvasRef.current || !imgRef.current) return;
-    const ctx = canvasRef.current.getContext("2d");
-    if (!ctx) return;
-    const overlays = results
-      ? {
-          boxes: results.boxes,
-          labels: results.labels,
-          scores: results.scores,
-          label_names: results.label_names,
-          threshold,
-          measurements,
-          measure_start: measureStart
-            ? { x1: measureStart.x, y1: measureStart.y, x2: measureStart.x, y2: measureStart.y }
-            : null,
-        }
-      : { boxes: [], labels: [], scores: [], threshold };
-    if (viewMode === "original") {
-      drawScan(ctx, imgRef.current, { boxes: [], labels: [], scores: [], threshold });
-    } else {
-      drawScan(ctx, imgRef.current, overlays);
-    }
-  }, [results, threshold, measurements, measureStart, viewMode]);
-
-  useEffect(() => {
-    if (results) renderCanvas();
-  }, [results, renderCanvas, showHeatmap, viewMode, measurements, measureStart, threshold]);
-
-  useEffect(() => {
-    if (!showHeatmap || !results?.heatmap || !canvasRef.current || !imgRef.current) return;
-    const ctx = canvasRef.current.getContext("2d");
-    if (!ctx) return;
-    const img = imgRef.current;
-
-    const hmImg = new window.Image();
-    hmImg.onload = () => {
-      if (viewMode === "original") {
-        drawScan(ctx, img, { boxes: [], labels: [], scores: [], threshold });
-        return;
-      }
-      drawScan(ctx, img, {
-        boxes: results.boxes,
-        labels: results.labels,
-        scores: results.scores,
-        label_names: results.label_names,
-        threshold,
-        heatmap: hmImg,
-        measurements,
-        measure_start: measureStart
-          ? { x1: measureStart.x, y1: measureStart.y, x2: measureStart.x, y2: measureStart.y }
-          : null,
-      });
-    };
-    hmImg.src = `data:image/png;base64,${results.heatmap}`;
-  }, [showHeatmap, results, viewMode, threshold, measurements, measureStart]);
-
   /* ---------- Predict ---------- */
 
   const handleDetect = async () => {
@@ -175,18 +97,6 @@ export function Detector() {
     }
   };
 
-  /* ---------- Download ---------- */
-
-  const downloadAnnotated = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || !image) return;
-    const link = document.createElement("a");
-    link.download = `annotated-${image.name.replace(/\.[^.]+$/, "")}.png`;
-    canvas.toBlob((blob) => {
-      if (blob) { link.href = URL.createObjectURL(blob); link.click(); }
-    });
-  };
-
   /* ---------- Report ---------- */
 
   const downloadReport = async () => {
@@ -201,47 +111,7 @@ export function Detector() {
     link.click();
   };
 
-  /* ---------- Measurement tool ---------- */
-
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!measuring || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-
-    if (!measureStart) {
-      setMeasureStart({ x, y });
-    } else {
-      setMeasurements(prev => [...prev, { x1: measureStart.x, y1: measureStart.y, x2: x, y2: y }]);
-      setMeasureStart(null);
-    }
-  };
-
-  const handleCanvasMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!measuring || !measureStart || !canvasRef.current || !imgRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-
-    drawScan(ctx, imgRef.current, {
-      boxes: results?.boxes ?? [],
-      labels: results?.labels ?? [],
-      scores: results?.scores ?? [],
-      label_names: results?.label_names,
-      threshold,
-      measurements,
-      measure_start: { x1: measureStart.x, y1: measureStart.y, x2: x, y2: y },
-    });
-  };
+  /* (measurement tool moved into ScanViewer) */
 
   /* ---------- Reset ---------- */
 
@@ -251,9 +121,6 @@ export function Detector() {
     setResults(null);
     setDetectError("");
     setLatestImageId(null);
-    setMeasurements([]);
-    setMeasureStart(null);
-    setShowHeatmap(false);
     setImageFileName("");
   };
 
@@ -300,18 +167,7 @@ export function Detector() {
               </label>
             ) : (
               <div className="text-center">
-                <div className="preview-container">
-                  <img ref={imgRef} src={preview} alt="Preview"
-                    style={{ display: results && viewMode !== "original" ? "none" : "block", maxWidth: "100%" }}
-                    onLoad={() => results && renderCanvas()} />
-                  <canvas ref={canvasRef}
-                    style={{ display: results && viewMode !== "original" ? "block" : "none", cursor: measuring ? "crosshair" : "default" }}
-                    onClick={handleCanvasClick} onMouseMove={handleCanvasMove} />
-                  {results?.heatmap && (
-                    <img ref={heatmapImgRef} src={`data:image/png;base64,${results.heatmap}`}
-                      style={{ display: "none" }} alt="" />
-                  )}
-                </div>
+                <ScanViewer imageUrl={preview} results={results} threshold={threshold} />
 
                 {/* Threshold slider */}
                 <div className="threshold-row">
@@ -329,43 +185,8 @@ export function Detector() {
                   <button className="btn btn-primary" onClick={handleDetect} disabled={loadingPred}>
                     {loadingPred ? <><span className="spinner-small" /> Processing&hellip;</> : "Detect"}
                   </button>
-                  {results && <button className="btn btn-accent" onClick={downloadAnnotated}><Download size={18} /> Download</button>}
                   {results && <button className="btn btn-secondary" onClick={downloadReport}><FileText size={18} /> Report</button>}
                 </div>
-
-                {/* View mode + extras toolbar */}
-                {results && (
-                  <div className="view-toolbar">
-                    <div className="toolbar-group">
-                      <Eye size={14} />
-                      {(["annotated", "original", "split"] as ViewMode[]).map(mode => (
-                        <button key={mode}
-                          className={`btn btn-tiny ${viewMode === mode ? "active" : ""}`}
-                          onClick={() => setViewMode(mode)}>
-                          {mode === "annotated" ? "Annotated" : mode === "original" ? "Original" : "Side-by-side"}
-                        </button>
-                      ))}
-                    </div>
-
-                    {results.heatmap && (
-                      <button className={`btn btn-tiny ${showHeatmap ? "active" : ""}`}
-                        onClick={() => setShowHeatmap(!showHeatmap)}>
-                        <Thermometer size={14} /> {showHeatmap ? "Hide Heatmap" : "Heatmap"}
-                      </button>
-                    )}
-
-                    <button className={`btn btn-tiny ${measuring ? "active" : ""}`}
-                      onClick={() => { setMeasuring(!measuring); if (!measuring) setMeasureStart(null); }}>
-                      <Ruler size={14} /> {measuring ? "Done Measuring" : "Measure"}
-                    </button>
-
-                    {measurements.length > 0 && (
-                      <button className="btn btn-tiny" onClick={() => { setMeasurements([]); setMeasureStart(null); }}>
-                        Clear Lines
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             )}
           </div>
