@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@niivue/niivue": "^0.69.0",
@@ -19,6 +20,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react-swc": "^4.3.1",
     "typescript": "^5.5.4",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.1.10"
   }
 }

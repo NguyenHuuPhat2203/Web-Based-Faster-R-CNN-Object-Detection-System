@@ -6,6 +6,7 @@ import {
   Brain, Activity, Server, Wifi,
 } from "lucide-react";
 import { WebcamCapture } from "./WebcamCapture";
+import { drawScan } from "../lib/drawScan";
 import {
   predict,
   getReportUrl,
@@ -98,103 +99,30 @@ export function Detector() {
     if (file && file.type.startsWith("image/")) loadFile(file);
   };
 
-  /* ---------- Drawing helpers ---------- */
-
-  const drawAnnotations = useCallback((
-    ctx: CanvasRenderingContext2D,
-    width: number,
-    height: number,
-    mode: "detections" | "measurements" | "all",
-  ) => {
-    if (results && (mode === "detections" || mode === "all")) {
-      ctx.lineWidth = 4;
-      ctx.font = "bold 22px Inter, system-ui, sans-serif";
-
-      results.boxes.forEach((box, i) => {
-        const [xmin, ymin, xmax, ymax] = box;
-        const score = results.scores[i];
-        if (score < threshold) return; // client-side re-filter by slider
-        const label = results.label_names?.[i] || LABEL_NAMES[results.labels[i]] || `Class ${results.labels[i]}`;
-
-        ctx.strokeStyle = "#10b981";
-        ctx.strokeRect(xmin, ymin, xmax - xmin, ymax - ymin);
-
-        const labelText = `${label}: ${(score * 100).toFixed(1)}%`;
-        const textWidth = ctx.measureText(labelText).width;
-
-        ctx.fillStyle = "#10b981";
-        ctx.fillRect(xmin, ymin - 34, textWidth + 14, 34);
-        ctx.fillStyle = "white";
-        ctx.fillText(labelText, xmin + 7, ymin - 9);
-      });
-    }
-
-    if (mode === "measurements" || mode === "all") {
-      ctx.strokeStyle = "#f59e0b";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 4]);
-      ctx.font = "bold 14px Inter, system-ui, sans-serif";
-
-      for (const m of measurements) {
-        ctx.beginPath();
-        ctx.moveTo(m.x1, m.y1);
-        ctx.lineTo(m.x2, m.y2);
-        ctx.stroke();
-
-        ctx.setLineDash([]);
-        ctx.fillStyle = "#f59e0b";
-        ctx.beginPath();
-        ctx.arc(m.x1, m.y1, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(m.x2, m.y2, 5, 0, Math.PI * 2);
-        ctx.fill();
-
-        const dist = Math.sqrt((m.x2 - m.x1) ** 2 + (m.y2 - m.y1) ** 2);
-        const mx = (m.x1 + m.x2) / 2;
-        const my = (m.y1 + m.y2) / 2;
-        const label = `${dist.toFixed(0)}px`;
-        const tw = ctx.measureText(label).width;
-        ctx.fillStyle = "rgba(245, 158, 11, 0.9)";
-        ctx.fillRect(mx - tw / 2 - 4, my - 12, tw + 8, 20);
-        ctx.fillStyle = "white";
-        ctx.fillText(label, mx - tw / 2, my + 4);
-
-        ctx.setLineDash([6, 4]);
-      }
-      ctx.setLineDash([]);
-
-      if (measureStart) {
-        ctx.strokeStyle = "#f59e0b";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 4]);
-        ctx.beginPath();
-      }
-      ctx.setLineDash([]);
-    }
-  }, [results, measurements, measureStart, threshold]);
 
   const renderCanvas = useCallback(() => {
     if (!canvasRef.current || !imgRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    const img = imgRef.current;
+    const ctx = canvasRef.current.getContext("2d");
     if (!ctx) return;
-
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-
+    const overlays = results
+      ? {
+          boxes: results.boxes,
+          labels: results.labels,
+          scores: results.scores,
+          label_names: results.label_names,
+          threshold,
+          measurements,
+          measure_start: measureStart
+            ? { x1: measureStart.x, y1: measureStart.y, x2: measureStart.x, y2: measureStart.y }
+            : null,
+        }
+      : { boxes: [], labels: [], scores: [], threshold };
     if (viewMode === "original") {
-      ctx.drawImage(img, 0, 0);
-      return;
+      drawScan(ctx, imgRef.current, { boxes: [], labels: [], scores: [], threshold });
+    } else {
+      drawScan(ctx, imgRef.current, overlays);
     }
-
-    ctx.drawImage(img, 0, 0);
-
-    if (viewMode === "annotated" || viewMode === "split") {
-      drawAnnotations(ctx, canvas.width, canvas.height, "all");
-    }
-  }, [viewMode, drawAnnotations]);
+  }, [results, threshold, measurements, measureStart, viewMode]);
 
   useEffect(() => {
     if (results) renderCanvas();
@@ -202,30 +130,31 @@ export function Detector() {
 
   useEffect(() => {
     if (!showHeatmap || !results?.heatmap || !canvasRef.current || !imgRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    const img = imgRef.current;
+    const ctx = canvasRef.current.getContext("2d");
     if (!ctx) return;
-
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-
-    if (viewMode === "original") {
-      ctx.drawImage(img, 0, 0);
-      return;
-    }
-
-    ctx.drawImage(img, 0, 0);
+    const img = imgRef.current;
 
     const hmImg = new window.Image();
     hmImg.onload = () => {
-      ctx.globalAlpha = 0.5;
-      ctx.drawImage(hmImg, 0, 0, canvas.width, canvas.height);
-      ctx.globalAlpha = 1.0;
-      drawAnnotations(ctx, canvas.width, canvas.height, "all");
+      if (viewMode === "original") {
+        drawScan(ctx, img, { boxes: [], labels: [], scores: [], threshold });
+        return;
+      }
+      drawScan(ctx, img, {
+        boxes: results.boxes,
+        labels: results.labels,
+        scores: results.scores,
+        label_names: results.label_names,
+        threshold,
+        heatmap: hmImg,
+        measurements,
+        measure_start: measureStart
+          ? { x1: measureStart.x, y1: measureStart.y, x2: measureStart.x, y2: measureStart.y }
+          : null,
+      });
     };
     hmImg.src = `data:image/png;base64,${results.heatmap}`;
-  }, [showHeatmap, results, viewMode, drawAnnotations]);
+  }, [showHeatmap, results, viewMode, threshold, measurements, measureStart]);
 
   /* ---------- Predict ---------- */
 
@@ -292,10 +221,10 @@ export function Detector() {
   };
 
   const handleCanvasMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!measuring || !measureStart || !canvasRef.current) return;
+    if (!measuring || !measureStart || !canvasRef.current || !imgRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-    if (!ctx || !imgRef.current) return;
+    if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
@@ -303,20 +232,15 @@ export function Detector() {
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    canvas.width = imgRef.current.naturalWidth;
-    canvas.height = imgRef.current.naturalHeight;
-    ctx.drawImage(imgRef.current, 0, 0);
-
-    drawAnnotations(ctx, canvas.width, canvas.height, "all");
-
-    ctx.strokeStyle = "#f59e0b";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    ctx.moveTo(measureStart.x, measureStart.y);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    drawScan(ctx, imgRef.current, {
+      boxes: results?.boxes ?? [],
+      labels: results?.labels ?? [],
+      scores: results?.scores ?? [],
+      label_names: results?.label_names,
+      threshold,
+      measurements,
+      measure_start: { x1: measureStart.x, y1: measureStart.y, x2: x, y2: y },
+    });
   };
 
   /* ---------- Reset ---------- */

@@ -7,6 +7,7 @@ import {
   detectionsToPredictionResult,
   type PredictionResult,
 } from "../lib/api";
+import { drawScan } from "../lib/drawScan";
 
 interface ImageViewerProps {
   imageId: number;
@@ -74,37 +75,17 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
   // Draw annotations once the image loads
   useEffect(() => {
     if (!effectiveResults || !canvasRef.current || !imgRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvasRef.current.getContext("2d");
     const img = imgRef.current;
     if (!ctx) return;
 
     const onLoad = () => {
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      ctx.drawImage(img, 0, 0);
-
-      if (!effectiveResults.boxes.length) return;
-
-      ctx.lineWidth = 4;
-      ctx.font = "bold 22px Inter, system-ui, sans-serif";
-
-      effectiveResults.boxes.forEach((box, i) => {
-        const [xmin, ymin, xmax, ymax] = box;
-        const score = effectiveResults.scores[i];
-        if (score < threshold) return; // client-side re-filter by slider
-        const label = effectiveResults.label_names?.[i] || `Class ${effectiveResults.labels[i]}`;
-
-        ctx.strokeStyle = "#10b981";
-        ctx.strokeRect(xmin, ymin, xmax - xmin, ymax - ymin);
-
-        const labelText = `${label}: ${(score * 100).toFixed(1)}%`;
-        const textWidth = ctx.measureText(labelText).width;
-
-        ctx.fillStyle = "#10b981";
-        ctx.fillRect(xmin, ymin - 34, textWidth + 14, 34);
-        ctx.fillStyle = "white";
-        ctx.fillText(labelText, xmin + 7, ymin - 9);
+      drawScan(ctx, img, {
+        boxes: effectiveResults.boxes,
+        labels: effectiveResults.labels,
+        scores: effectiveResults.scores,
+        label_names: effectiveResults.label_names,
+        threshold,
       });
     };
 
