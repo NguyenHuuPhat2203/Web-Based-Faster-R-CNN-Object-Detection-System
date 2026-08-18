@@ -13,8 +13,6 @@ from ..repositories.user_repository import UserRepository
 from ..schemas.auth import TokenResponse, UserWithTokens
 from .token_service import TokenService
 
-settings = get_settings()
-
 
 class AuthService:
     """Coordinate registration, login, refresh, and Google OAuth flows."""
@@ -144,6 +142,7 @@ class AuthService:
 
     def get_google_auth_url(self) -> str:
         """Build the Google OAuth consent-screen URL."""
+        settings = get_settings()
         params = {
             "client_id": settings.google_client_id,
             "redirect_uri": settings.google_redirect_uri,
@@ -155,6 +154,7 @@ class AuthService:
 
     def build_oauth_redirect(self, tokens: UserWithTokens) -> str:
         """Build the frontend OAuth callback redirect URL."""
+        settings = get_settings()
         return (
             f"{settings.frontend_url}/oauth-callback"
             f"#access_token={tokens.access_token}"

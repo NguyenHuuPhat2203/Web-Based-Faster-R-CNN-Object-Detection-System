@@ -12,8 +12,6 @@ import requests
 from ..config import get_settings
 from .exceptions import OAuthError, TokenError
 
-settings = get_settings()
-
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
@@ -48,6 +46,7 @@ def create_access_token(user_id: int) -> tuple[str, str, datetime]:
         Tuple of token string, JWT ID, and expiration timestamp.
     """
     jti = _make_jti()
+    settings = get_settings()
     exp = utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
     payload = {
         "sub": str(user_id),
@@ -69,6 +68,7 @@ def create_refresh_token(user_id: int) -> tuple[str, str, datetime]:
         Tuple of token string, JWT ID, and expiration timestamp.
     """
     jti = _make_jti()
+    settings = get_settings()
     exp = utcnow() + timedelta(days=settings.refresh_token_expire_days)
     payload = {
         "sub": str(user_id),
@@ -93,6 +93,7 @@ def decode_token(token: str) -> dict:
         TokenError: If the token is expired or invalid.
     """
     try:
+        settings = get_settings()
         return jwt.decode(
             token,
             settings.secret_key,
@@ -116,6 +117,7 @@ def exchange_google_auth_code(code: str) -> dict:
     Raises:
         OAuthError: If the exchange request fails.
     """
+    settings = get_settings()
     data = {
         "code": code,
         "client_id": settings.google_client_id,

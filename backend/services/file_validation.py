@@ -5,8 +5,6 @@ from __future__ import annotations
 from ..config import get_settings
 from ..core.exceptions import PayloadTooLargeError, ValidationError
 
-settings = get_settings()
-
 
 def validate_image_upload(
     *,
@@ -25,6 +23,7 @@ def validate_image_upload(
     if not content_type or not content_type.startswith("image/"):
         raise ValidationError("File must be an image")
 
+    settings = get_settings()
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
     if size_bytes > max_bytes:
         raise PayloadTooLargeError(
