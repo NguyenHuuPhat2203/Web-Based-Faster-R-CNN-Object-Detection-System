@@ -5,13 +5,8 @@ import {
 } from "lucide-react";
 import { WebcamCapture } from "./WebcamCapture";
 import { ScanViewer } from "./ScanViewer";
-import {
-  predict,
-  getReportUrl,
-  authFetch,
-  type PredictionResult,
-  type ModelType,
-} from "../lib/api";
+import { authFetch } from "../lib/session";
+import { predict, getReportUrl, type PredictionResult, type ModelType } from "../lib/api";
 
 /* ---------- Label map (mirrors backend CLASS_NAMES) ---------- */
 

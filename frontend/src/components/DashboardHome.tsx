@@ -11,8 +11,8 @@ import {
   Clock,
 } from "lucide-react";
 import { useNavigate, useOutletContext } from "react-router-dom";
+import { authFetch } from "../lib/session";
 import {
-  authFetch,
   fetchUserStats,
   listImages,
   getImageUrl,

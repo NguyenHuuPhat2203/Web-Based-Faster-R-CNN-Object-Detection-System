@@ -7,14 +7,13 @@ import React, {
   type ReactNode,
 } from "react";
 import {
+  authFetch,
   isAuthenticated,
-  login as apiLogin,
-  register as apiRegister,
   logout as apiLogout,
   processOAuthTokens,
   refreshTokens,
-  type UserInfo,
-} from "../lib/api";
+} from "../lib/session";
+import { login as apiLogin, register as apiRegister, type UserInfo } from "../lib/api";
 
 /* ---------- Types ---------- */
 

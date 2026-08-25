@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { X, Download, FileText, AlertCircle } from "lucide-react";
+import { authFetch } from "../lib/session";
 import {
-  authFetch,
   getReportUrl,
   listImages,
   detectionsToPredictionResult,

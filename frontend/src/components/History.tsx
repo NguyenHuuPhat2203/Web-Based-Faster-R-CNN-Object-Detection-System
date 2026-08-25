@@ -11,11 +11,11 @@ import {
   Upload,
 } from "lucide-react";
 import { useNavigate, useOutletContext } from "react-router-dom";
+import { authFetch } from "../lib/session";
 import {
   listImages,
   getImageUrl,
   getReportUrl,
-  authFetch,
   detectionsToPredictionResult,
   type ImageInfo,
 } from "../lib/api";
