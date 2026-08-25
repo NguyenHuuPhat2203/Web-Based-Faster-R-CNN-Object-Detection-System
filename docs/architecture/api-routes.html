@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Routes</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --paper: #f5f5f5; --ink: #2d3142; --muted: #4f5d75; --accent: #eb6c36; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: 'Geist', sans-serif; padding: 3rem 2rem; }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  .eyebrow { font-family: 'Geist Mono', monospace; font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-family: 'Instrument Serif', serif; font-size: 2.5rem; font-weight: 400; margin: 0.5rem 0 0.25rem; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+  svg { display: block; width: 100%; height: auto; }
+  .colophon { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid rgba(45,49,66,0.12); font-family: 'Geist Mono', monospace; font-size: 9px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Tree — Endpoints</p>
+  <h1>API Routes — NeuroScan</h1>
+  <p class="subtitle">FastAPI · v1 bare + v2 item-schema · auth on all predict/images routes</p>
+
+  <svg viewBox="0 0 960 200" role="img" aria-labelledby="apiroute-title apiroute-desc" xmlns="http://www.w3.org/2000/svg">
+    <title id="apiroute-title">API Routes</title>
+    <desc id="apiroute-desc">A tree of the FastAPI surface grouped into five route families: auth, prediction v1 and v2, images, operations health endpoints, and the planned case-viewer routes.</desc>
+
+    <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+    <line x1="420" y1="72" x2="420" y2="88" stroke="#4f5d75" stroke-width="1"/>
+    <line x1="100" y1="88" x2="820" y2="88" stroke="#4f5d75" stroke-width="1"/>
+    <line x1="100" y1="88" x2="100" y2="96" stroke="#4f5d75" stroke-width="1"/>
+    <line x1="280" y1="88" x2="280" y2="96" stroke="#4f5d75" stroke-width="1"/>
+    <line x1="460" y1="88" x2="460" y2="96" stroke="#4f5d75" stroke-width="1"/>
+    <line x1="640" y1="88" x2="640" y2="96" stroke="#4f5d75" stroke-width="1"/>
+    <line x1="820" y1="88" x2="820" y2="96" stroke="#4f5d75" stroke-width="1"/>
+
+    <rect x="380" y="28" width="160" height="44" rx="6" fill="#f5f5f5"/>
+    <rect x="380" y="28" width="160" height="44" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+    <text x="460" y="50" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">FastAPI app</text>
+    <text x="460" y="64" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">backend.main:app</text>
+
+    <rect x="0" y="96" width="200" height="56" rx="6" fill="#f5f5f5"/>
+    <rect x="0" y="96" width="200" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+    <text x="100" y="120" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">auth</text>
+    <text x="100" y="134" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">register · login · refresh</text>
+    <text x="100" y="146" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">logout · google</text>
+
+    <rect x="180" y="96" width="200" height="56" rx="6" fill="#f5f5f5"/>
+    <rect x="180" y="96" width="200" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+    <text x="280" y="120" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">predict (v1 + v2)</text>
+    <text x="280" y="134" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">/predict · /predict-yolo</text>
+    <text x="280" y="146" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">/v2/predict · /v2/yolo</text>
+
+    <rect x="360" y="96" width="200" height="56" rx="6" fill="#f5f5f5"/>
+    <rect x="360" y="96" width="200" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+    <text x="460" y="120" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">images</text>
+    <text x="460" y="134" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">list · get · delete</text>
+    <text x="460" y="146" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">/{id}/report</text>
+
+    <rect x="540" y="96" width="200" height="56" rx="6" fill="#f5f5f5"/>
+    <rect x="540" y="96" width="200" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+    <text x="640" y="120" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ops</text>
+    <text x="640" y="134" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">/healthz · /readyz</text>
+    <text x="640" y="146" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">/metrics</text>
+
+    <rect x="720" y="96" width="200" height="56" rx="6" fill="#f5f5f5"/>
+    <rect x="720" y="96" width="200" height="56" rx="6" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+    <text x="820" y="120" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">case-viewer</text>
+    <text x="820" y="134" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">/cases · /slices</text>
+    <text x="820" y="146" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">planned · ticket 22</text>
+  </svg>
+
+  <p class="colophon">auth required on all predict + images routes · v2 = {status, result|error} envelope · case-viewer dashed = planned</p>
+</div>
+</body>
+</html>

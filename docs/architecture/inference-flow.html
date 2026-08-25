@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inference Flow</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --paper: #f5f5f5; --ink: #2d3142; --muted: #4f5d75; --accent: #eb6c36; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: 'Geist', sans-serif; padding: 3rem 2rem; }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  .eyebrow { font-family: 'Geist Mono', monospace; font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-family: 'Instrument Serif', serif; font-size: 2.5rem; font-weight: 400; margin: 0.5rem 0 0.25rem; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+  svg { display: block; width: 100%; height: auto; }
+  .colophon { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid rgba(45,49,66,0.12); font-family: 'Geist Mono', monospace; font-size: 9px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Flowchart</p>
+  <h1>Inference Flow — FRCNN with OOM Fallback</h1>
+  <p class="subtitle">decode → forward → threshold → GradCAM · GPU OOM x2 → fresh CPU model</p>
+
+  <svg viewBox="0 0 840 640" role="img" aria-labelledby="infflow-title infflow-desc" xmlns="http://www.w3.org/2000/svg">
+    <title id="infflow-title">Inference Flow</title>
+    <desc id="infflow-desc">A flowchart of Faster R-CNN inference: decode and tensorize, forward on GPU with an out-of-memory retry then a fresh CPU fallback, threshold post-processing, then optional Grad-CAM before returning results.</desc>
+
+    <defs>
+      <marker id="infflow-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+    </defs>
+
+    <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+    <!-- Arrows -->
+    <line x1="320" y1="68" x2="320" y2="92" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <line x1="320" y1="132" x2="320" y2="156" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <line x1="320" y1="196" x2="320" y2="212" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <line x1="320" y1="268" x2="320" y2="320" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <rect x="330" y="286" width="20" height="12" rx="2" fill="#f5f5f5"/>
+    <text x="340" y="295" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">NO</text>
+    <path d="M380,240 H432 Q440,240 440,232 V220" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <rect x="392" y="218" width="24" height="12" rx="2" fill="#f5f5f5"/>
+    <text x="404" y="227" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">YES</text>
+    <line x1="530" y1="240" x2="530" y2="272" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <path d="M530,328 V336 H336 Q328,336 328,328 V320" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <rect x="540" y="336" width="20" height="12" rx="2" fill="#f5f5f5"/>
+    <text x="550" y="345" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">NO</text>
+    <path d="M590,300 H612 Q620,300 620,292 V280" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <rect x="596" y="272" width="24" height="12" rx="2" fill="#f5f5f5"/>
+    <text x="608" y="281" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">YES</text>
+    <path d="M710,300 V312 H352 Q344,312 344,320" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <line x1="320" y1="360" x2="320" y2="376" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <line x1="320" y1="432" x2="320" y2="548" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <rect x="330" y="470" width="20" height="12" rx="2" fill="#f5f5f5"/>
+    <text x="340" y="479" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">NO</text>
+    <line x1="380" y1="404" x2="460" y2="404" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+    <rect x="392" y="392" width="24" height="12" rx="2" fill="#f5f5f5"/>
+    <text x="404" y="401" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">YES</text>
+    <path d="M550,424 V560 H340 Q332,560 332,552 V548" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#infflow-arrow)"/>
+
+    <!-- Start / end ovals -->
+    <rect x="240" y="28" width="160" height="40" rx="20" fill="#f5f5f5"/>
+    <rect x="240" y="28" width="160" height="40" rx="20" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+    <text x="320" y="52" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">predict request</text>
+    <rect x="240" y="548" width="160" height="40" rx="20" fill="#f5f5f5"/>
+    <rect x="240" y="548" width="160" height="40" rx="20" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+    <text x="320" y="572" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">result</text>
+
+    <!-- Steps -->
+    <rect x="240" y="92" width="160" height="40" rx="6" fill="#f5f5f5"/>
+    <rect x="240" y="92" width="160" height="40" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+    <text x="320" y="116" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">decode + tensor</text>
+    <rect x="240" y="156" width="160" height="40" rx="6" fill="#f5f5f5"/>
+    <rect x="240" y="156" width="160" height="40" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+    <text x="320" y="180" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">forward (GPU)</text>
+    <rect x="440" y="200" width="180" height="40" rx="6" fill="#f5f5f5"/>
+    <rect x="440" y="200" width="180" height="40" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+    <text x="530" y="224" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">free memory · retry</text>
+    <rect x="620" y="260" width="180" height="40" rx="6" fill="#f5f5f5"/>
+    <rect x="620" y="260" width="180" height="40" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+    <text x="710" y="284" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">CPU fallback</text>
+    <text x="710" y="296" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">fresh model · no cache</text>
+    <rect x="240" y="320" width="160" height="40" rx="6" fill="#f5f5f5"/>
+    <rect x="240" y="320" width="160" height="40" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+    <text x="320" y="344" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">postprocess · threshold</text>
+    <rect x="460" y="384" width="180" height="40" rx="6" fill="#f5f5f5"/>
+    <rect x="460" y="384" width="180" height="40" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+    <text x="550" y="408" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">GradCAM (optional)</text>
+
+    <!-- Diamonds -->
+    <polygon points="320,212 380,240 320,268 260,240" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+    <text x="320" y="244" fill="#2d3142" font-size="10" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">OOM?</text>
+    <polygon points="530,272 590,300 530,328 470,300" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+    <text x="530" y="304" fill="#2d3142" font-size="10" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">OOM?</text>
+    <polygon points="320,376 380,404 320,432 260,404" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+    <text x="320" y="408" fill="#2d3142" font-size="10" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">explain?</text>
+  </svg>
+
+  <p class="colophon">OOM x2 → free GPU cache → fresh CPU model (use_cache=False) · Grad-CAM skipped on fallback · non-OOM errors still raise</p>
+</div>
+</body>
+</html>

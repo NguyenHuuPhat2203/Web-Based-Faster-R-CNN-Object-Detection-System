@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Case Viewer — Data Flow</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --paper: #f5f5f5; --ink: #2d3142; --muted: #4f5d75; --accent: #eb6c36; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: 'Geist', sans-serif; padding: 3rem 2rem; }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  .eyebrow { font-family: 'Geist Mono', monospace; font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-family: 'Instrument Serif', serif; font-size: 2.5rem; font-weight: 400; margin: 0.5rem 0 0.25rem; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+  svg { display: block; width: 100%; height: auto; }
+  .colophon { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid rgba(45,49,66,0.12); font-family: 'Geist Mono', monospace; font-size: 9px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Data Flow</p>
+  <h1>Case Viewer — Multi-Region Pipeline</h1>
+  <p class="subtitle">BraTS-GLI NIfTI → parse → volumes &amp; masks → API → React viewer (ticket 22)</p>
+
+  <svg viewBox="0 0 728 436" role="img" aria-labelledby="cvdf-title cvdf-desc" xmlns="http://www.w3.org/2000/svg">
+    <title id="cvdf-title">Case Viewer Data Flow</title>
+    <desc id="cvdf-desc">A four-role pipeline: data sources download BraTS-GLI cases, a service parses NIfTI volumes and computes per-region volumes and masks, the FastAPI router serves them, and the React viewer renders slices with a three-color overlay and metrics.</desc>
+
+    <defs>
+      <pattern id="cvdf-dots" width="22" height="22" patternUnits="userSpaceOnUse">
+        <circle cx="11" cy="11" r="0.8" fill="rgba(45,49,66,0.10)"/>
+      </pattern>
+      <marker id="cvdf-muted"  markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#4f5d75"/></marker>
+      <marker id="cvdf-accent" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#eb6c36"/></marker>
+      <marker id="cvdf-link"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#2e5aa8"/></marker>
+    </defs>
+
+    <rect width="100%" height="100%" fill="#f5f5f5"/>
+    <rect width="100%" height="100%" fill="url(#cvdf-dots)" opacity="0.6"/>
+
+    <!-- Lane tints + dividers -->
+    <rect x="0" y="36" width="728" height="80" fill="rgba(45,49,66,0.018)"/>
+    <rect x="0" y="196" width="728" height="80" fill="rgba(45,49,66,0.018)"/>
+    <line x1="0" y1="36" x2="728" y2="36" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+    <line x1="0" y1="116" x2="728" y2="116" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+    <line x1="0" y1="196" x2="728" y2="196" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+    <line x1="0" y1="276" x2="728" y2="276" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+    <line x1="0" y1="356" x2="728" y2="356" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+    <line x1="140" y1="36" x2="140" y2="356" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+
+    <!-- Lane labels -->
+    <text x="70" y="72" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">DATA</text>
+    <text x="70" y="84" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">SOURCES</text>
+    <text x="70" y="152" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">CASE</text>
+    <text x="70" y="164" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">SERVICE</text>
+    <text x="70" y="232" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">FASTAPI</text>
+    <text x="70" y="244" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">ROUTER</text>
+    <text x="70" y="312" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">REACT</text>
+    <text x="70" y="324" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">VIEWER</text>
+
+    <!-- Step header chips -->
+    <rect x="180" y="6" width="32" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
+    <text x="196" y="14" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">01</text>
+    <text x="196" y="29" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">DOWNLOAD</text>
+    <rect x="292" y="6" width="32" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
+    <text x="308" y="14" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">02</text>
+    <text x="308" y="29" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">PARSE</text>
+    <rect x="404" y="6" width="32" height="16" rx="8" fill="rgba(235,108,54,0.20)"/>
+    <text x="420" y="14" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">03</text>
+    <text x="420" y="29" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">COMPUTE</text>
+    <rect x="516" y="6" width="32" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
+    <text x="532" y="14" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">04</text>
+    <text x="532" y="29" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">SERVE</text>
+    <rect x="628" y="6" width="32" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
+    <text x="644" y="14" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">05</text>
+    <text x="644" y="29" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">RENDER</text>
+
+    <!-- Arrows (before nodes) -->
+    <path d="M246,76 H300 Q308,76 308,84 V124" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#cvdf-muted)"/>
+    <path d="M358,124 H370" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#cvdf-muted)"/>
+    <path d="M470,124 H524 Q532,124 532,132 V204" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#cvdf-accent)"/>
+    <rect x="452" y="104" width="88" height="12" rx="2" fill="#f5f5f5"/>
+    <text x="496" y="113" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">MASKS + METRICS</text>
+    <path d="M582,204 H636 Q644,204 644,212 V284" fill="none" stroke="#2e5aa8" stroke-width="1" marker-end="url(#cvdf-link)"/>
+
+    <!-- Nodes -->
+    <!-- DAT / 01 -->
+    <rect x="146" y="44" width="100" height="64" rx="6" fill="#f5f5f5"/>
+    <rect x="146" y="44" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+    <rect x="150" y="48" width="18" height="10" rx="3" fill="rgba(45,49,66,0.12)"/>
+    <text x="159" y="55" fill="#2d3142" font-size="6" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle">DAT</text>
+    <text x="196" y="67" fill="#2d3142" font-size="9" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">BraTS-GLI cases</text>
+    <text x="196" y="79" fill="#4f5d75" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">val · 4 modalities</text>
+    <text x="196" y="91" fill="#7a8399" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">HF · Zenodo</text>
+    <rect x="226" y="98" width="16" height="8" rx="3" fill="#5e7a9b"/>
+    <text x="234" y="104" fill="#ffffff" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle">DB</text>
+    <!-- SVC / 02 -->
+    <rect x="258" y="124" width="100" height="64" rx="6" fill="#f5f5f5"/>
+    <rect x="258" y="124" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+    <rect x="262" y="128" width="18" height="10" rx="3" fill="rgba(45,49,66,0.12)"/>
+    <text x="271" y="135" fill="#2d3142" font-size="6" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle">SVC</text>
+    <text x="308" y="147" fill="#2d3142" font-size="9" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Load NIfTI</text>
+    <text x="308" y="159" fill="#4f5d75" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">nibabel · affine</text>
+    <text x="308" y="171" fill="#7a8399" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">t1n + seg</text>
+    <rect x="262" y="178" width="16" height="8" rx="3" fill="#5e7a9b"/>
+    <text x="270" y="184" fill="#ffffff" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle">DB</text>
+    <rect x="338" y="178" width="16" height="8" rx="3" fill="#b8915a"/>
+    <text x="346" y="184" fill="#ffffff" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle">TB</text>
+    <!-- SVC / 03 -->
+    <rect x="370" y="124" width="100" height="64" rx="6" fill="#f5f5f5"/>
+    <rect x="370" y="124" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+    <rect x="374" y="128" width="18" height="10" rx="3" fill="rgba(45,49,66,0.12)"/>
+    <text x="383" y="135" fill="#2d3142" font-size="6" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle">SVC</text>
+    <text x="420" y="147" fill="#2d3142" font-size="9" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Compute metrics</text>
+    <text x="420" y="159" fill="#4f5d75" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">volumes · regions</text>
+    <text x="420" y="171" fill="#7a8399" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">numpy · mask</text>
+    <rect x="374" y="178" width="16" height="8" rx="3" fill="#b8915a"/>
+    <text x="382" y="184" fill="#ffffff" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle">TB</text>
+    <rect x="450" y="178" width="16" height="8" rx="3" fill="#9c6b50"/>
+    <text x="458" y="184" fill="#ffffff" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle">FL</text>
+    <!-- API / 04 (focal node) -->
+    <rect x="482" y="204" width="100" height="64" rx="6" fill="#f5f5f5"/>
+    <rect x="482" y="204" width="100" height="64" rx="6" fill="rgba(235,108,54,0.07)" stroke="#eb6c36" stroke-width="1"/>
+    <rect x="486" y="208" width="18" height="10" rx="3" fill="rgba(235,108,54,0.18)"/>
+    <text x="495" y="215" fill="#eb6c36" font-size="6" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle">API</text>
+    <text x="532" y="227" fill="#2d3142" font-size="9" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Serve endpoints</text>
+    <text x="532" y="239" fill="#4f5d75" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">/cases · /slices</text>
+    <text x="532" y="251" fill="#7a8399" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">fastapi router</text>
+    <rect x="486" y="258" width="16" height="8" rx="3" fill="#9c6b50"/>
+    <text x="494" y="264" fill="#ffffff" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle">FL</text>
+    <rect x="562" y="258" width="16" height="8" rx="3" fill="#6e6479"/>
+    <text x="570" y="264" fill="#ffffff" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle">WB</text>
+    <!-- FE / 05 -->
+    <rect x="594" y="284" width="100" height="64" rx="6" fill="#f5f5f5"/>
+    <rect x="594" y="284" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+    <rect x="598" y="288" width="18" height="10" rx="3" fill="rgba(45,49,66,0.12)"/>
+    <text x="607" y="295" fill="#2d3142" font-size="6" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle">FE</text>
+    <text x="644" y="307" fill="#2d3142" font-size="9" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Case viewer</text>
+    <text x="644" y="319" fill="#4f5d75" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">slider · overlay</text>
+    <text x="644" y="331" fill="#7a8399" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">canvas · react</text>
+    <rect x="598" y="338" width="16" height="8" rx="3" fill="#6e6479"/>
+    <text x="606" y="344" fill="#ffffff" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle">WB</text>
+
+    <!-- Legend -->
+    <text x="144" y="372" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.14em">STEPS</text>
+    <rect x="216" y="366" width="32" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
+    <text x="224" y="374" fill="#2d3142" font-size="6" font-family="'Geist Mono', monospace">01</text>
+    <text x="256" y="374" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace">DOWNLOAD</text>
+    <rect x="340" y="366" width="32" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
+    <text x="348" y="374" fill="#2d3142" font-size="6" font-family="'Geist Mono', monospace">02</text>
+    <text x="380" y="374" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace">PARSE</text>
+    <rect x="436" y="366" width="32" height="16" rx="8" fill="rgba(235,108,54,0.20)"/>
+    <text x="444" y="374" fill="#eb6c36" font-size="6" font-family="'Geist Mono', monospace">03</text>
+    <text x="476" y="374" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace">COMPUTE</text>
+    <rect x="552" y="366" width="32" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
+    <text x="560" y="374" fill="#2d3142" font-size="6" font-family="'Geist Mono', monospace">04</text>
+    <text x="592" y="374" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace">SERVE</text>
+    <rect x="648" y="366" width="32" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
+    <text x="656" y="374" fill="#2d3142" font-size="6" font-family="'Geist Mono', monospace">05</text>
+    <text x="688" y="374" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace">RENDER</text>
+
+    <text x="144" y="393" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.14em">DATA TYPE</text>
+    <rect x="228" y="389" width="16" height="8" rx="3" fill="#5e7a9b"/>
+    <text x="252" y="396" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace">DB</text>
+    <rect x="292" y="389" width="16" height="8" rx="3" fill="#b8915a"/>
+    <text x="316" y="396" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace">TB</text>
+    <rect x="356" y="389" width="16" height="8" rx="3" fill="#9c6b50"/>
+    <text x="380" y="396" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace">FL</text>
+    <rect x="420" y="389" width="16" height="8" rx="3" fill="#6e6479"/>
+    <text x="444" y="396" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace">WB</text>
+    <text x="492" y="396" fill="#7a8399" font-size="6.5" font-family="'Geist Mono', monospace">left = input · right = output</text>
+
+    <text x="144" y="415" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.14em">FLOW</text>
+    <line x1="212" y1="412" x2="252" y2="412" stroke="#4f5d75" stroke-width="1" marker-end="url(#cvdf-muted)"/>
+    <text x="260" y="415" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace">HANDOFF</text>
+    <line x1="332" y1="412" x2="372" y2="412" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#cvdf-accent)"/>
+    <text x="380" y="415" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace">FOCAL</text>
+    <line x1="440" y1="412" x2="480" y2="412" stroke="#2e5aa8" stroke-width="1" marker-end="url(#cvdf-link)"/>
+    <text x="488" y="415" fill="#2e5aa8" font-size="7" font-family="'Geist Mono', monospace">PUBLISH</text>
+  </svg>
+
+  <p class="colophon">Case Viewer (ticket 22) — demo-first · nibabel parse · masks base64-PNG · volumes cm³ from pixel spacing</p>
+</div>
+</body>
+</html>
