@@ -332,6 +332,63 @@ export async function fetchUserStats(): Promise<UserStats> {
   return res.json();
 }
 
+/* ---------- Case viewer (ticket 22) ---------- */
+
+export interface CaseVolume {
+  ncr: number;
+  ed: number;
+  et: number;
+  total: number;
+}
+
+export interface CaseViewerCase {
+  case_id: string;
+  slices: number;
+  volumes_cm3: CaseVolume;
+}
+
+export interface CaseSlice {
+  slice_index: number;
+  slices: number;
+  base: string; // base64 PNG
+  mask: string; // base64 PNG (RGBA overlay)
+}
+
+export async function listCaseViewerCases(): Promise<CaseViewerCase[]> {
+  const res = await authFetch("/case-viewer/cases");
+  if (!res.ok) throw new Error("Failed to fetch cases");
+  const data = await res.json();
+  return data.cases;
+}
+
+export async function getCaseViewerSlice(
+  caseId: string,
+  z: number,
+): Promise<CaseSlice> {
+  const res = await authFetch(`/case-viewer/cases/${caseId}/slices/${z}`);
+  if (!res.ok) throw new Error("Failed to fetch slice");
+  return res.json();
+}
+
+export async function getCaseViewerVolume(
+  caseId: string,
+  type: "t1ce" | "seg" | "pred",
+): Promise<Blob> {
+  const res = await authFetch(`/case-viewer/cases/${caseId}/volume?type=${type}`);
+  if (!res.ok) throw new Error(`Failed to fetch ${type} volume`);
+  return res.blob();
+}
+
+export async function segmentCaseViewerCase(
+  caseId: string,
+): Promise<{ seconds: number; volumes_cm3: Record<string, number> }> {
+  const res = await authFetch(`/case-viewer/cases/${caseId}/segment`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to segment case");
+  return res.json();
+}
+
 /* ---------- Profile API ---------- */
 
 export interface ProfileUpdate {

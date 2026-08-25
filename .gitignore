@@ -24,3 +24,6 @@ training/outputs/
 *.egg-info/
 dist/
 build/
+data/BraTS2021_Training_Data/
+data/BraTS2021_Training_Data.zip
+.weights/

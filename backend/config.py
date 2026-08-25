@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     upload_dir: str = "uploads"
     max_upload_size_mb: int = 10
     frontend_url: str = "http://localhost:8001"
+    case_viewer_dir: Path = _PROJECT_ROOT / "data" / "BraTS2021_Training_Data"
 
     checkpoint_dir: Path = _PROJECT_ROOT / "checkpoints"
     registry_dir: Path = _PROJECT_ROOT / "registry"

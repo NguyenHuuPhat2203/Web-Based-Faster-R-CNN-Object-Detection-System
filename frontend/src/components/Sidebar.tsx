@@ -11,6 +11,7 @@ import {
   Menu,
   HelpCircle,
   Activity,
+  Boxes,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
@@ -23,6 +24,7 @@ export function Sidebar() {
     { to: "/detector", label: "Detector", icon: <Scan size={19} /> },
     { to: "/history", label: "History", icon: <Clock size={19} /> },
     { to: "/settings", label: "Settings", icon: <Settings size={19} /> },
+    { to: "/case-viewer", label: "Case Viewer", icon: <Boxes size={19} /> },
   ];
 
   const initials = "D"; // Dr. Smith

@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ml.core.constants import FRCNN_MODEL_VERSION
 
-from .api.routers import auth, images, predict, predict_v2, predict_yolo
+from .api.routers import auth, case_viewer, images, predict, predict_v2, predict_yolo
 from .config import get_settings
 from .core.exceptions import (
     ConflictError,
@@ -96,6 +96,7 @@ app.include_router(predict.router)
 app.include_router(predict_yolo.router)
 app.include_router(predict_v2.router)
 app.include_router(images.router)
+app.include_router(case_viewer.router)
 
 if os.path.exists(settings.upload_dir):
     app.mount(

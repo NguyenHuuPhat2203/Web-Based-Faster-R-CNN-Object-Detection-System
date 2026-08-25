@@ -9,6 +9,7 @@ import { DashboardHome } from "./components/DashboardHome";
 import { Detector } from "./components/Detector";
 import { History } from "./components/History";
 import { Settings } from "./components/Settings";
+import { CaseViewer } from "./components/CaseViewer";
 
 function LoadingScreen() {
   return (
@@ -59,6 +60,7 @@ function App() {
         <Route path="detector" element={<Detector />} />
         <Route path="history" element={<History />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="case-viewer" element={<CaseViewer />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
