@@ -16,10 +16,11 @@ class TestScanPersistenceService:
         """Persist an image and associated detections."""
         from backend.services import scan_persistence_service
 
+        class _Settings:
+            upload_dir = str(tmp_path)
+
         monkeypatch.setattr(
-            scan_persistence_service.settings,
-            "upload_dir",
-            str(tmp_path),
+            scan_persistence_service, "get_settings", lambda: _Settings()
         )
 
         user = User(email="scan@example.com", username="Scanner")

@@ -17,8 +17,6 @@ from ..models import Detection as DetectionRow
 from ..models import Image, User
 from ..repositories.image_repository import ImageRepository
 
-settings = get_settings()
-
 
 def _image_dimensions(contents: bytes) -> tuple[int | None, int | None]:
     """Return (width, height) from the image header without a full decode."""
@@ -46,6 +44,7 @@ class ScanPersistenceService:
         Returns:
             Persisted image ORM instance.
         """
+        settings = get_settings()
         user_dir = os.path.join(settings.upload_dir, str(user.id))
         os.makedirs(user_dir, exist_ok=True)
 
