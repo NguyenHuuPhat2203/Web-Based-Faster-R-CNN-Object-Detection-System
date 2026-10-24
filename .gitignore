@@ -40,7 +40,6 @@ registry/**/*.pth
 /AGENTS.md
 /CLAUDE.md
 /MIGRATE_HF.md
-.github/copilot-instructions.md
 
 # OS
 .DS_Store
