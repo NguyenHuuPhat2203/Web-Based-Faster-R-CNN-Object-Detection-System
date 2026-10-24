@@ -10,7 +10,6 @@ uploads/
 !ARCHITECTURE.md
 !registry/README.md
 !training/notebooks/README.md
-!models/README.md
 .DS_Store
 .superpowers/
 data/raw/
