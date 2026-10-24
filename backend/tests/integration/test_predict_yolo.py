@@ -30,3 +30,5 @@ class TestPredictYolo:
         data = response.json()
         assert data["model_type"] == "yolov8"
         assert "boxes" in data
+        listed = client.get("/images", headers=auth_headers).json()["images"]
+        assert data["image_id"] == listed[0]["id"]

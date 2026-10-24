@@ -87,3 +87,21 @@ class TestImages:
 
         response = client.delete(f"/images/{image_id}", headers=other_headers)
         assert response.status_code == 403
+
+    def test_static_upload_path_is_not_mounted(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        test_image_bytes: bytes,
+    ) -> None:
+        """Uploads are served only through the authenticated image route."""
+        client.post(
+            "/predict",
+            files={"file": ("scan.png", test_image_bytes, "image/png")},
+            headers=auth_headers,
+        )
+        listed = client.get("/images", headers=auth_headers).json()["images"][0]
+        owned = client.get(f"/images/{listed['id']}", headers=auth_headers)
+        assert owned.status_code == 200
+        static = client.get("/static/uploads/whatever.png")
+        assert static.status_code == 404

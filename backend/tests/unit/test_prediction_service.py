@@ -52,7 +52,6 @@ def test_scan_entity_carries_the_artifact() -> None:
     scan = Scan(
         contents=b"img",
         original_name="mri.png",
-        content_type="image/png",
         threshold=0.5,
         model_type="faster-rcnn",
         model_version="v1",
@@ -60,7 +59,6 @@ def test_scan_entity_carries_the_artifact() -> None:
     )
     assert scan.threshold == 0.5
     assert scan.original_name == "mri.png"
-    assert scan.content_type == "image/png"
 
 
 def test_run_persists_scan_with_injected_adapter(db_session) -> None:
@@ -73,16 +71,17 @@ def test_run_persists_scan_with_injected_adapter(db_session) -> None:
         user=user,
         contents=_png_bytes(),
         original_name="mri.png",
-        content_type="image/png",
         score_floor=0.1,
+        threshold=0.4,
     )
 
     assert result.boxes == [[10.0, 20.0, 60.0, 80.0]]
     assert result.scores == pytest.approx([0.95])
     saved = db_session.query(Image).filter(Image.user_id == user.id).one()
+    assert result.image_id == saved.id
     assert saved.original_name == "mri.png"
     assert saved.model_type == "fake"
-    assert saved.threshold == 0.1
+    assert saved.threshold == 0.4
     assert len(saved.detections) == 1
 
 
@@ -97,6 +96,6 @@ def test_run_requires_adapter_for_unknown_model(db_session) -> None:
             user=user,
             contents=_png_bytes(),
             original_name="mri.png",
-            content_type="image/png",
             score_floor=0.1,
+            threshold=0.5,
         )

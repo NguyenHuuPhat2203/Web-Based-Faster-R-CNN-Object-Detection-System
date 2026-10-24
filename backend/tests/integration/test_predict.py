@@ -61,6 +61,8 @@ class TestPredict:
         assert "boxes" in data
         assert "scores" in data
         assert "label_names" in data
+        listed = client.get("/images", headers=auth_headers).json()["images"]
+        assert data["image_id"] == listed[0]["id"]
 
     def test_keeps_server_side_threshold_filter(
         self,

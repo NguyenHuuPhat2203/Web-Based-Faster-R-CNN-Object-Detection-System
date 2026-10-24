@@ -131,3 +131,16 @@ def test_reset_clears_both_caches(tmp_path) -> None:
     assert case_store.get_mask("BraTS2021_00001") is None
     # parsed cache refills lazily from disk on the next call
     assert case_store.analyze("BraTS2021_00001")["case_id"] == "BraTS2021_00001"
+
+
+def test_case_dir_rejects_traversal(tmp_path) -> None:
+    """Ids that escape the case root are reported as missing cases."""
+    secret = tmp_path.parent / "secret_case"
+    secret.mkdir()
+    (secret / "x_t1ce.nii.gz").write_bytes(b"x")
+    with pytest.raises(FileNotFoundError):
+        case_store.case_dir("../secret_case")
+    with pytest.raises(FileNotFoundError):
+        case_store.case_dir(r"..\\secret_case")
+    with pytest.raises(FileNotFoundError):
+        case_store.volume_path("BraTS2021_00001/../secret_case", "t1ce")

@@ -36,8 +36,7 @@ class TestScanPersistenceService:
         service = ScanPersistenceService(db_session)
         scan = Scan(
             contents=contents,
-            original_name="scan.png",
-            content_type="image/png",
+            original_name="scan.jpg",
             threshold=0.5,
             model_type="faster-rcnn",
             model_version="test",
@@ -46,12 +45,15 @@ class TestScanPersistenceService:
                     box=[1.0, 2.0, 10.0, 12.0],
                     label=1,
                     score=0.9,
-                    label_name="Brain tumor",
+                    label_name="positive",
                 )
             ],
         )
         image = service.save_scan_result(user=user, scan=scan)
 
         assert image.id is not None
+        assert image.mime_type == "image/png"
+        assert image.stored_name.endswith(".png")
+        assert (image.width, image.height) == (32, 32)
         assert len(image.detections) == 1
-        assert image.detections[0].label_name == "Brain tumor"
+        assert image.detections[0].label_name == "positive"

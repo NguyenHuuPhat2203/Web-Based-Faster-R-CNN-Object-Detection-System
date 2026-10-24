@@ -6,6 +6,7 @@ import pytest
 import torch
 from PIL import Image
 
+from ml.core.constants import FASTER_RCNN_CLASS_NAMES
 from ml.core.postprocess import filter_above_floor, tensors_to_inference_result
 from ml.transforms import image_to_tensor
 
@@ -26,21 +27,21 @@ def test_filter_above_floor() -> None:
     assert int(out_labels[0]) == 1
 
 
-def test_tensors_to_inference_result() -> None:
-    """Tensor conversion produces matching list lengths."""
-    boxes = torch.tensor([[0.0, 0.0, 10.0, 10.0]])
-    scores = torch.tensor([0.8])
-    labels = torch.tensor([1])
+def test_tensors_to_inference_result_maps_dataset_classes() -> None:
+    """Faster R-CNN label 1 is the dataset's negative class, 2 the positive."""
+    boxes = torch.tensor([[0.0, 0.0, 10.0, 10.0], [1.0, 1.0, 5.0, 5.0]])
+    scores = torch.tensor([0.8, 0.6])
+    labels = torch.tensor([2, 1])
     result = tensors_to_inference_result(
         boxes,
         scores,
         labels,
+        class_names=FASTER_RCNN_CLASS_NAMES,
         model_type="faster-rcnn",
         model_version="resnet50-fpn-v1",
     )
-    assert len(result.boxes) == 1
-    assert result.label_names[0] == "Brain tumor"
-    assert len(result.detections) == 1
+    assert result.label_names == ["positive", "negative"]
+    assert [d.label for d in result.detections] == [2, 1]
 
 
 def test_image_to_tensor_rgb() -> None:

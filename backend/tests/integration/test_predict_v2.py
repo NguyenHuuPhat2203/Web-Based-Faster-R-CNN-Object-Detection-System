@@ -37,6 +37,8 @@ class TestPredictV2:
         assert "success" not in data
         assert "boxes" in data["result"]
         assert data["result"]["model_type"] == "faster-rcnn"
+        listed = client.get("/images", headers=auth_headers).json()["images"]
+        assert data["result"]["image_id"] == listed[0]["id"]
 
     def test_returns_full_box_set_below_default_threshold(
         self,
@@ -95,6 +97,30 @@ class TestPredictV2:
         )
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
+
+    def test_sanitizes_inference_exception(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        test_image_bytes: bytes,
+        monkeypatch,
+    ) -> None:
+        """Inference exceptions must not leak internals in the response."""
+
+        def boom(self, **kwargs):
+            raise RuntimeError("/secret/checkpoint")
+
+        monkeypatch.setattr(PredictionService, "run", boom)
+        response = client.post(
+            "/v2/predict",
+            files={"file": ("test.png", test_image_bytes, "image/png")},
+            headers=auth_headers,
+        )
+        assert response.json()["error"] == {
+            "code": "INFERENCE_FAILED",
+            "message": "Inference failed",
+        }
+        assert "/secret/checkpoint" not in response.text
 
 
 class TestPredictYoloV2:

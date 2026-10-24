@@ -25,7 +25,6 @@ class Scan:
 
     contents: bytes
     original_name: str | None
-    content_type: str | None
     threshold: float
     model_type: str
     model_version: str

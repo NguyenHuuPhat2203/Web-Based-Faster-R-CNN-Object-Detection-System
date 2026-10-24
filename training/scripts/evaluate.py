@@ -9,7 +9,7 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from ml.backbone.faster_rcnn import create_faster_rcnn, get_device, load_state_dict
+from ml.models.faster_rcnn import create_faster_rcnn, get_device, load_state_dict
 from training.data.dataset import YoloDetectionDataset, detection_collate
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from ml.core.entities import InferenceResult, Scan
+from ml.core.entities import Scan
 
 from ..models import User
 from ..pipeline.inference import InferenceEngine, ModelAdapter
@@ -20,9 +20,42 @@ class PredictionService:
         self.persistence = ScanPersistenceService(db)
         self.adapters = adapters
 
-    @staticmethod
-    def _to_response(result: InferenceResult) -> PredictionResult:
-        """Map domain inference result to the v1 HTTP schema."""
+    def run(
+        self,
+        *,
+        model_type: str,
+        user: User,
+        contents: bytes,
+        original_name: str | None,
+        score_floor: float,
+        threshold: float,
+        explain: bool = False,
+    ) -> PredictionResult:
+        """Run inference for a model type, persist, and map to the HTTP schema.
+
+        Args:
+            model_type: ``"faster-rcnn"`` or ``"yolov8"``.
+            user: Authenticated user instance.
+            contents: Raw, already validated image bytes.
+            original_name: Original client filename (display only).
+            score_floor: Minimum confidence the server returns and stores.
+            threshold: Client-visible threshold, persisted with the scan.
+            explain: Compute Grad-CAM when True (Faster R-CNN only).
+        """
+        result = InferenceEngine(self.adapters[model_type]).run(
+            contents, score_floor=score_floor, explain=explain
+        )
+        image = self.persistence.save_scan_result(
+            user=user,
+            scan=Scan(
+                contents=contents,
+                original_name=original_name,
+                threshold=threshold,
+                model_type=result.model_type,
+                model_version=result.model_version,
+                detections=result.detections,
+            ),
+        )
         return PredictionResult(
             boxes=result.boxes,
             labels=result.labels,
@@ -31,48 +64,5 @@ class PredictionService:
             heatmap=result.heatmap,
             model_type=result.model_type,
             model_version=result.model_version,
+            image_id=image.id,
         )
-
-    def run(
-        self,
-        *,
-        model_type: str,
-        user: User,
-        contents: bytes,
-        original_name: str | None,
-        content_type: str | None,
-        score_floor: float,
-        threshold: float | None = None,
-        explain: bool = False,
-    ) -> PredictionResult:
-        """Run inference for a model type, persist, and map to the HTTP schema.
-
-        Args:
-            model_type: ``"faster-rcnn"`` or ``"yolov8"``.
-            user: Authenticated user instance.
-            contents: Raw image bytes.
-            original_name: Original client filename.
-            content_type: MIME type reported by the client.
-            score_floor: Minimum confidence the server returns.
-            threshold: Client-visible threshold, persisted as metadata only.
-            explain: Compute Grad-CAM when True (Faster R-CNN only).
-        """
-        adapter = self.adapters[model_type]
-        result = InferenceEngine(adapter).run(
-            contents, score_floor=score_floor, explain=explain
-        )
-        scan = Scan(
-            contents=contents,
-            original_name=original_name,
-            content_type=content_type,
-            threshold=threshold if threshold is not None else score_floor,
-            model_type=result.model_type,
-            model_version=result.model_version,
-            detections=result.detections,
-        )
-        self._persist(user=user, scan=scan)
-        return self._to_response(result)
-
-    def _persist(self, *, user: User, scan: Scan) -> None:
-        """Persist a scan for the authenticated user."""
-        self.persistence.save_scan_result(user=user, scan=scan)

@@ -189,8 +189,8 @@ def main(argv: list[str] | None = None) -> int:
     gt_files = sorted(args.case.glob("*_seg.nii*"))
     if gt_files:
         gt = nib.load(gt_files[0]).get_fdata().astype(np.uint8)
-        from ml.backbone.segment3d import dice
         from ml.core.labels import REGIONS
+        from ml.models.swin_unetr import dice
 
         print(
             "dice vs expert:",

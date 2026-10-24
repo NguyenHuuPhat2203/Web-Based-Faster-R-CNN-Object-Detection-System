@@ -8,8 +8,7 @@ import pytest
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from ml.backbone.faster_rcnn import create_faster_rcnn, reset_model_cache
-from ml.core.postprocess import filter_above_floor, tensors_to_inference_result
+from ml.models.faster_rcnn import create_faster_rcnn, reset_model_cache
 
 
 class _TinyDetectionDataset(Dataset):
@@ -124,34 +123,6 @@ def test_inference_latency_budget() -> None:
             _ = model([image])
     avg_ms = (time.perf_counter() - started) / 3 * 1000
     assert avg_ms <= 60_000, f"Latency budget exceeded: {avg_ms:.1f}ms"
-
-
-@pytest.mark.golden
-def test_postprocess_golden_values() -> None:
-    """Fixed input tensors must produce stable postprocess output."""
-    boxes = torch.tensor(
-        [[10.0, 20.0, 30.0, 40.0], [5.0, 5.0, 15.0, 15.0]],
-        dtype=torch.float32,
-    )
-    scores = torch.tensor([0.91, 0.42], dtype=torch.float32)
-    labels = torch.tensor([1, 2], dtype=torch.int64)
-
-    filtered_boxes, filtered_scores, filtered_labels = filter_above_floor(
-        boxes, scores, labels, floor=0.5
-    )
-    result = tensors_to_inference_result(
-        filtered_boxes,
-        filtered_scores,
-        filtered_labels,
-        model_type="faster-rcnn",
-        model_version="resnet50-fpn-v1",
-    )
-
-    assert result.boxes == [[10.0, 20.0, 30.0, 40.0]]
-    assert result.labels == [1]
-    assert result.scores == pytest.approx([0.91], rel=1e-5)
-    assert result.label_names == ["Brain tumor"]
-    assert result.model_type == "faster-rcnn"
 
 
 @pytest.mark.golden

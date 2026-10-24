@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..models import Detection, Image, User
@@ -26,7 +27,9 @@ class StatsService:
         Returns:
             Aggregated user statistics.
         """
-        now = datetime.now(UTC)
+        month_start = datetime.now(UTC).replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
 
         total_scans = (
             self.db.query(Image)
@@ -39,15 +42,20 @@ class StatsService:
             .filter(
                 Image.user_id == current_user.id,
                 ~Image.deleted,
-                Image.uploaded_at >= now.replace(day=1),
+                Image.uploaded_at >= month_start,
             )
             .count()
         )
 
+        # v2 stores detections down to a low floor; count what the user saw.
         total_detections = (
             self.db.query(Detection)
             .join(Image)
-            .filter(Image.user_id == current_user.id, ~Image.deleted)
+            .filter(
+                Image.user_id == current_user.id,
+                ~Image.deleted,
+                Detection.score >= func.coalesce(Image.threshold, 0.0),
+            )
             .count()
         )
 

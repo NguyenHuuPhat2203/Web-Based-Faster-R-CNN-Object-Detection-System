@@ -1,4 +1,4 @@
-"""Unit tests for OOM -> CPU fallback in the inference engine."""
+"""Unit tests for the inference engine: decode, OOM fallback, adapter caching."""
 
 from __future__ import annotations
 
@@ -19,12 +19,35 @@ def _png_bytes(size: int = 64) -> bytes:
     return buf.getvalue()
 
 
+def test_engine_applies_exif_orientation() -> None:
+    """A JPEG tagged 'rotate 90' reaches the model in its displayed orientation."""
+    seen: list[tuple[int, int]] = []
+
+    class _SizeAdapter(ModelAdapter):
+        def forward(self, image, device) -> RawDetections:
+            seen.append(image.size)
+            return RawDetections(
+                boxes=torch.empty(0, 4),
+                scores=torch.empty(0),
+                labels=torch.empty(0, dtype=torch.int64),
+            )
+
+    exif = PILImage.Exif()
+    exif[0x0112] = 6  # Orientation: rotate 90 CW to display
+    buffer = io.BytesIO()
+    PILImage.new("RGB", (40, 20)).save(buffer, format="JPEG", exif=exif)
+
+    InferenceEngine(_SizeAdapter()).run(buffer.getvalue())
+
+    assert seen == [(20, 40)]
+
+
 class _OOMAdapter(ModelAdapter):
     """Raise OOM twice, then return one detection."""
 
     model_type = "faster-rcnn"
     model_version = "test"
-    class_names = {1: "Brain tumor"}
+    class_names = {1: "negative"}
 
     def __init__(self) -> None:
         self.calls = 0
@@ -72,13 +95,20 @@ def test_engine_reraises_non_oom(monkeypatch: pytest.MonkeyPatch) -> None:
         InferenceEngine(_ExplodingAdapter()).run(_png_bytes())
 
 
-def test_frcnn_adapter_loads_fresh_cpu_model(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("primary", "requested", "cached"),
+    [
+        ("cuda", "cpu", False),  # OOM fallback: fresh CPU model, GPU cache intact
+        ("cpu", "cpu", True),  # CPU-only host must not reload every request
+    ],
+)
+def test_faster_rcnn_adapter_caches_primary_device_only(
+    monkeypatch: pytest.MonkeyPatch, primary: str, requested: str, cached: bool
 ) -> None:
-    """A1 invariant: CPU fallback loads an uncached model (use_cache=False)."""
+    """Only the primary device's model is cached."""
     import backend.pipeline.adapters as adapters
 
-    calls: list[tuple] = []
+    calls: list[bool] = []
 
     class _DummyModel:
         def __call__(self, tensor):
@@ -91,12 +121,14 @@ def test_frcnn_adapter_loads_fresh_cpu_model(
             ]
 
     def fake_load(**kwargs):
-        calls.append((kwargs.get("device"), kwargs.get("use_cache")))
+        calls.append(kwargs["use_cache"])
         return _DummyModel()
 
     monkeypatch.setattr(adapters, "load_faster_rcnn", fake_load)
+    monkeypatch.setattr(adapters, "get_device", lambda: torch.device(primary))
 
-    adapter = adapters.FasterRCNNAdapter()
-    adapter.forward(PILImage.new("RGB", (8, 8)), torch.device("cpu"))
+    adapters.FasterRCNNAdapter().forward(
+        PILImage.new("RGB", (8, 8)), torch.device(requested)
+    )
 
-    assert calls[-1] == (torch.device("cpu"), False)
+    assert calls == [cached]

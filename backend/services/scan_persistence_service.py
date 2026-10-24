@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import io
-import os
 import uuid
+from pathlib import Path
 
 from PIL import Image as PILImage
+from PIL import ImageOps
 from sqlalchemy.orm import Session
 
 from ml.core.entities import Scan
@@ -16,15 +17,6 @@ from ..config import get_settings
 from ..models import Detection as DetectionRow
 from ..models import Image, User
 from ..repositories.image_repository import ImageRepository
-
-
-def _image_dimensions(contents: bytes) -> tuple[int | None, int | None]:
-    """Return (width, height) from the image header without a full decode."""
-    try:
-        with PILImage.open(io.BytesIO(contents)) as img:
-            return img.width, img.height
-    except Exception:
-        return None, None
 
 
 class ScanPersistenceService:
@@ -37,31 +29,36 @@ class ScanPersistenceService:
     def save_scan_result(self, *, user: User, scan: Scan) -> Image:
         """Persist an uploaded image (raw bytes) and its detections.
 
+        MIME type and file extension come from the decoded image format, never
+        from the client-supplied name or ``Content-Type``, because the stored
+        file is later served back with that MIME type.
+
         Args:
             user: Authenticated user instance.
-            scan: The scan artifact to persist.
+            scan: The scan artifact to persist (bytes already validated).
 
         Returns:
             Persisted image ORM instance.
         """
-        settings = get_settings()
-        user_dir = os.path.join(settings.upload_dir, str(user.id))
-        os.makedirs(user_dir, exist_ok=True)
+        with PILImage.open(io.BytesIO(scan.contents)) as decoded:
+            image_format = decoded.format or "PNG"
+            # Same frame the detector used (see InferenceEngine decode).
+            width, height = ImageOps.exif_transpose(decoded).size
+        mime_type = PILImage.MIME.get(image_format, "application/octet-stream")
+        extension = f".{image_format.lower()}"
 
-        extension = os.path.splitext(scan.original_name or "image.jpg")[1] or ".jpg"
+        user_dir = Path(get_settings().upload_dir) / str(user.id)
+        user_dir.mkdir(parents=True, exist_ok=True)
         stored_name = f"{uuid.uuid4().hex}{extension}"
-        file_path = os.path.join(user_dir, stored_name)
-        with open(file_path, "wb") as fh:
-            fh.write(scan.contents)
-
-        width, height = _image_dimensions(scan.contents)
+        file_path = user_dir / stored_name
+        file_path.write_bytes(scan.contents)
 
         image = Image(
             user_id=user.id,
             original_name=scan.original_name or "unknown",
             stored_name=stored_name,
-            filepath=file_path,
-            mime_type=scan.content_type or "image/jpeg",
+            filepath=str(file_path),
+            mime_type=mime_type,
             width=width,
             height=height,
             file_size=len(scan.contents),
@@ -70,17 +67,16 @@ class ScanPersistenceService:
             model_version=scan.model_version,
             threshold=scan.threshold,
         )
-
         detection_rows = [
             DetectionRow(
-                label=det.label,
-                label_name=det.label_name,
-                score=det.score,
-                x1=det.box[0],
-                y1=det.box[1],
-                x2=det.box[2],
-                y2=det.box[3],
+                label=detection.label,
+                label_name=detection.label_name,
+                score=detection.score,
+                x1=detection.box[0],
+                y1=detection.box[1],
+                x2=detection.box[2],
+                y2=detection.box[3],
             )
-            for det in scan.detections
+            for detection in scan.detections
         ]
         return self.repo.create_with_detections(image, detection_rows)

@@ -9,8 +9,8 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from ml.backbone.faster_rcnn import create_faster_rcnn, get_device
 from ml.config import TrainConfig
+from ml.models.faster_rcnn import create_faster_rcnn, get_device
 from training.trainer.seed import set_seed
 
 logger = structlog.get_logger()
@@ -39,7 +39,7 @@ def train_faster_rcnn(
     model = create_faster_rcnn(num_classes=config.model.num_classes).to(device)
 
     if resume_from_checkpoint and resume_from_checkpoint.exists():
-        from ml.backbone.faster_rcnn import load_state_dict
+        from ml.models.faster_rcnn import load_state_dict
 
         load_state_dict(model, resume_from_checkpoint, device=device)
 
