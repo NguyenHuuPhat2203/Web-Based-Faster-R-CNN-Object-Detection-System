@@ -37,13 +37,13 @@ class UserService:
         Raises:
             ConflictError: If the email is already in use.
         """
-        if username is not None:
-            current_user.username = username
         if email is not None:
             existing = self.users.get_by_email(email)
             if existing and existing.id != current_user.id:
                 raise ConflictError("Email already in use")
             current_user.email = email
+        if username is not None:
+            current_user.username = username
         return self.users.save(current_user)
 
     def change_password(

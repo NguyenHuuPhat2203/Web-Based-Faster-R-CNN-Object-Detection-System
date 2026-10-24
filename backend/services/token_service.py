@@ -7,7 +7,11 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from ..core.exceptions import TokenError
-from ..core.security import decode_token, utcnow
+from ..core.security import (
+    ACCESS_TOKEN_TYPE,
+    REFRESH_TOKEN_TYPE,
+    decode_token,
+)
 from ..repositories.token_repository import TokenRepository
 
 
@@ -18,27 +22,39 @@ class TokenService:
         """Initialize the service with a database session."""
         self.repo = TokenRepository(db)
 
+    def revoke_payload(self, payload: dict) -> bool:
+        """Blacklist a decoded token until its natural expiry.
+
+        Args:
+            payload: Validated claims from ``decode_token``.
+
+        Returns:
+            True if this call revoked the token, False if already revoked.
+        """
+        expires_at = datetime.fromtimestamp(payload["exp"], tz=UTC)
+        return self.repo.add(payload["jti"], expires_at)
+
     def revoke_tokens(self, access_token: str, refresh_token: str) -> None:
-        """Blacklist access and refresh tokens when possible.
+        """Blacklist the access and refresh tokens that are still valid.
+
+        Tokens that are expired, malformed, or of the wrong type are skipped:
+        they cannot be used anyway.
 
         Args:
             access_token: Raw access token string.
             refresh_token: Raw refresh token string.
         """
-        now = utcnow()
-        for raw_token in (access_token, refresh_token):
+        for raw_token, token_type in (
+            (access_token, ACCESS_TOKEN_TYPE),
+            (refresh_token, REFRESH_TOKEN_TYPE),
+        ):
             try:
-                payload = decode_token(raw_token)
+                payload = decode_token(raw_token, token_type)
             except TokenError:
                 continue
+            self.revoke_payload(payload)
 
-            jti = payload.get("jti")
-            exp = payload.get("exp")
-            if jti:
-                expires_at = datetime.fromtimestamp(exp, tz=UTC) if exp else now
-                self.repo.add(jti, expires_at)
-
-    def ensure_not_blacklisted(self, jti: str | None) -> None:
+    def ensure_not_blacklisted(self, jti: str) -> None:
         """Raise when a JWT ID is blacklisted.
 
         Args:
@@ -47,5 +63,5 @@ class TokenService:
         Raises:
             TokenError: If the token has been revoked.
         """
-        if jti and self.repo.is_blacklisted(jti):
+        if self.repo.is_blacklisted(jti):
             raise TokenError("Token has been revoked")

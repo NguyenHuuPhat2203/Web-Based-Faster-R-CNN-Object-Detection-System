@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from collections.abc import Generator
+
+os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production-012345")
+# Integration tests persist uploads; keep them out of the real uploads/ dir.
+os.environ["UPLOAD_DIR"] = tempfile.mkdtemp(prefix="brain-tumor-test-uploads-")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,6 +28,7 @@ database_module.engine = TEST_ENGINE
 database_module.SessionLocal = TEST_SESSION
 
 from backend.core.database import Base, get_db  # noqa: E402
+from backend.core.rate_limit import reset_auth_rate_limit  # noqa: E402
 from backend.main import app  # noqa: E402
 
 
@@ -32,6 +39,17 @@ def override_get_db() -> Generator:
         yield db
     finally:
         db.close()
+
+
+@pytest.fixture(autouse=True)
+def _auth_rate_limit_isolated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[None, None, None]:
+    """Keep suite tests off the production auth rate-limit ceiling."""
+    monkeypatch.setattr("backend.core.rate_limit.MAX_HITS", 10_000)
+    reset_auth_rate_limit()
+    yield
+    reset_auth_rate_limit()
 
 
 @pytest.fixture

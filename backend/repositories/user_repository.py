@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..core.exceptions import ConflictError
 from ..models import User
 
 
@@ -16,19 +19,19 @@ class UserRepository:
 
     def get_by_id(self, user_id: int) -> User | None:
         """Return a user by primary key."""
-        return self.db.query(User).filter(User.id == user_id).first()
+        return self.db.get(User, user_id)
 
     def get_by_email(self, email: str) -> User | None:
-        """Return a user by email address."""
-        return self.db.query(User).filter(User.email == email).first()
-
-    def get_by_google_id_or_email(self, google_id: str, email: str) -> User | None:
-        """Return a user matching a Google ID or email."""
+        """Return a user by email address, ignoring case."""
         return (
             self.db.query(User)
-            .filter((User.google_id == google_id) | (User.email == email))
+            .filter(func.lower(User.email) == email.strip().lower())
             .first()
         )
+
+    def get_by_google_id(self, google_id: str) -> User | None:
+        """Return a user linked to a Google account ID."""
+        return self.db.query(User).filter(User.google_id == google_id).first()
 
     def create(
         self,
@@ -38,7 +41,11 @@ class UserRepository:
         hashed_password: str | None = None,
         google_id: str | None = None,
     ) -> User:
-        """Create and persist a new user."""
+        """Create and persist a new user.
+
+        Raises:
+            ConflictError: If the email or Google ID is already taken.
+        """
         user = User(
             email=email,
             username=username,
@@ -46,12 +53,18 @@ class UserRepository:
             google_id=google_id,
         )
         self.db.add(user)
-        self.db.commit()
-        self.db.refresh(user)
-        return user
+        return self.save(user)
 
     def save(self, user: User) -> User:
-        """Persist changes to an existing user."""
-        self.db.commit()
+        """Persist changes to a user.
+
+        Raises:
+            ConflictError: If a unique constraint (email, Google ID) is violated.
+        """
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise ConflictError("Email or Google account already in use") from None
         self.db.refresh(user)
         return user
