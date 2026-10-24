@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # ── Build frontend ────────────────────────────────────────
-FROM node:20-alpine AS frontend-build
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS frontend-build
 
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
@@ -13,7 +13,7 @@ ENV VITE_API_URL=${VITE_API_URL}
 RUN npm run build
 
 # ── Build backend ─────────────────────────────────────────
-FROM python:3.12-slim AS backend-build
+FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea AS backend-build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
@@ -27,11 +27,8 @@ COPY backend/ /app/backend/
 COPY ml/ /app/ml/
 ENV PYTHONPATH=/app
 
-# Download model checkpoint from Hugging Face Hub at build time
-RUN python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='LuxeFats/FasterRCNN-Checkpoint', filename='model.pth', local_dir='/checkpoints')" 2>/dev/null || echo "Checkpoint download skipped (will download at runtime)"
-
 # ── Runtime ───────────────────────────────────────────────
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 nginx supervisor curl cron \
@@ -46,8 +43,6 @@ COPY --from=backend-build /usr/local/bin/ /usr/local/bin/
 COPY backend/ /app/backend/
 COPY ml/ /app/ml/
 
-# Copy pre-downloaded checkpoint from builder (if any)
-COPY --from=backend-build /checkpoints/ /checkpoints/
 RUN mkdir -p /checkpoints /app/uploads /var/log/cron
 
 # Copy frontend
@@ -82,9 +77,6 @@ server {
         client_max_body_size 50M;
     }
 
-    location /static/uploads/ {
-        alias /app/uploads/;
-    }
 
     location / {
         try_files $uri $uri/ /index.html;

@@ -1,24 +1,36 @@
-# Git
+# VCS and tooling caches
 .git
 .gitignore
 .gitattributes
+.gitnexus
+.claude
+.superpowers
+.pi-subagents
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
 
 # Python
 .venv
-__pycache__
-*.pyc
-*.pyo
+**/__pycache__
+**/*.pyc
+**/*.pyo
+*.egg-info
 
 # Node
-node_modules
-frontend/node_modules
+**/node_modules
 frontend/dist
 
-# Data
+# Data, weights, and runtime state (mounted at runtime, never baked)
+data/
+.weights/
 checkpoints/
-!checkpoints/.gitkeep
-uploads/
+registry/**/*.safetensors
+registry/**/*.pt
+registry/**/*.pth
+training/outputs/
+**/uploads/
 
-# Environment
-.env
-*.db
+# Secrets and local databases
+**/.env
+**/*.db

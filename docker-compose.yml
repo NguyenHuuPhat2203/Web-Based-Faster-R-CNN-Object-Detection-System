@@ -10,6 +10,7 @@ services:
       - db:/app/db
       - ./registry:/registry:ro
       - ./checkpoints:/checkpoints:ro
+      - ./.weights:/weights:ro
     env_file:
       - backend/.env
     environment:
@@ -17,6 +18,7 @@ services:
       - UPLOAD_DIR=uploads
       - CHECKPOINT_DIR=/checkpoints
       - REGISTRY_DIR=/registry
+      - SWIN_UNETR_WEIGHTS=/weights/fold0_f48_ep300_4gpu_dice0_8854/model.pt
     healthcheck:
       test:
         [
