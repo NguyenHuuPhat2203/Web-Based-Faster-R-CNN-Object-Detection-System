@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -39,6 +40,7 @@ def test_write_entry_copies_weights_and_metadata(tmp_path) -> None:
     assert meta["dataset_hash"] == "abc"
     assert meta["metrics"] == {"mAP@0.5": 0.7}
     assert meta["weights"] == "yolov8_tumor.pt"
+    assert meta["weights_sha256"] == hashlib.sha256(b"fake-weights").hexdigest()
 
 
 def test_write_entry_applies_converter(tmp_path) -> None:
@@ -98,3 +100,20 @@ def test_production_version_allowed_with_i_know(tmp_path) -> None:
         i_know=True,
     )
     assert out.exists()
+
+
+@pytest.mark.parametrize("version", ["v1.0.0/../v1.0.0", "../escape"])
+def test_write_entry_rejects_path_escape(tmp_path, version: str) -> None:
+    """Version strings must stay inside the registry root."""
+    src = _write_weights(tmp_path)
+    with pytest.raises(RegistryGuardError):
+        write_registry_entry(
+            model_key="yolo",
+            version=version,
+            dataset_version="v1",
+            dataset_hash="",
+            metrics={},
+            weights_src=src,
+            weights_name="yolov8_tumor.pt",
+            registry_root=tmp_path / "registry",
+        )

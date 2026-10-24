@@ -10,21 +10,27 @@ from pathlib import Path
 import torch
 from safetensors.torch import save_file
 
+from ml.models.faster_rcnn import create_faster_rcnn
 from training.scripts.registry import RegistryGuardError, write_registry_entry
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _convert_to_safetensors(src: Path, dest: Path) -> None:
-    """Load a torch checkpoint and save it as safetensors."""
+    """Load a torch checkpoint, check it fits the served model, save safetensors.
+
+    Raises:
+        RuntimeError: If keys or shapes do not match the Faster R-CNN head the
+            backend loads (e.g. wrong class count or ``module.`` prefixes).
+    """
     state = torch.load(src, map_location="cpu", weights_only=True)
     if isinstance(state, dict) and "state_dict" in state:
         state = state["state_dict"]
     if isinstance(state, dict) and "model" in state:
         state = state["model"]
+    create_faster_rcnn(pretrained=False).load_state_dict(state, strict=True)
     # safetensors requires contiguous CPU tensors
-    clean = {k: v.contiguous().cpu() for k, v in state.items()}
-    save_file(clean, str(dest))
+    save_file({k: v.contiguous().cpu() for k, v in state.items()}, str(dest))
 
 
 def export_and_promote(
@@ -54,7 +60,6 @@ def export_and_promote(
         convert=_convert_to_safetensors,
         registry_root=registry_root,
         i_know=i_know,
-        source_checkpoint=str(checkpoint),
     )
 
 

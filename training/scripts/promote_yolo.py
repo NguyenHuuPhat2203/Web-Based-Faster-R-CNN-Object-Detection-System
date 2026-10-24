@@ -33,7 +33,6 @@ def promote_yolo(
         weights_name="yolov8_tumor.pt",
         registry_root=registry_root,
         i_know=i_know,
-        source_checkpoint=str(checkpoint),
     )
 
 
