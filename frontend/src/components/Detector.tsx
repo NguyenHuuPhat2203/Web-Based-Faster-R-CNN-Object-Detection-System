@@ -1,19 +1,13 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Upload, AlertCircle, Sliders, RotateCcw, Camera, Cpu, FileText,
-  CheckCircle, Brain, Activity, Server, Wifi,
+  CheckCircle, Brain, Activity, Server,
 } from "lucide-react";
 import { WebcamCapture } from "./WebcamCapture";
 import { ScanViewer } from "./ScanViewer";
-import { authFetch } from "../lib/session";
-import { predict, getReportUrl, type PredictionResult, type ModelType } from "../lib/api";
-
-/* ---------- Label map (mirrors backend CLASS_NAMES) ---------- */
-
-const LABEL_NAMES: Record<number, string> = {
-  1: "Brain tumor",
-  2: "Brain tumor",
-};
+import { ConfidenceSlider } from "./ConfidenceSlider";
+import { messageOf, downloadReport, predict, type PredictionResult, type ModelType } from "../lib/api";
+import { DEFAULT_CONFIDENCE, displayLabel, isTumor, visibleDetections } from "../lib/detections";
 
 /* ---------- Model options ---------- */
 
@@ -21,8 +15,6 @@ const MODELS: { value: ModelType; label: string }[] = [
   { value: "faster-rcnn", label: "Faster R-CNN" },
   { value: "yolov8", label: "YOLOv8" },
 ];
-
-/* ---------- Types ---------- */
 
 export function Detector() {
   // -- Mode --
@@ -34,7 +26,7 @@ export function Detector() {
   const [loadingPred, setLoadingPred] = useState(false);
   const [results, setResults] = useState<PredictionResult | null>(null);
   const [detectError, setDetectError] = useState("");
-  const [threshold, setThreshold] = useState(0.5);
+  const [threshold, setThreshold] = useState(DEFAULT_CONFIDENCE);
   const [model, setModel] = useState<ModelType>("faster-rcnn");
   const [latestImageId, setLatestImageId] = useState<number | null>(null);
   const [imageFileName, setImageFileName] = useState<string>("");
@@ -43,21 +35,40 @@ export function Detector() {
   const [isDragging, setIsDragging] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Identifies the latest detect request so a stale response cannot overwrite a newer scan.
+  const runId = useRef(0);
+
+  // Object URL lives exactly as long as the selected file.
+  useEffect(() => {
+    if (!image) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(image);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [image]);
 
   /* ---------- File handling ---------- */
 
-  const loadFile = useCallback((file: File) => {
-    setImage(file);
-    setPreview(URL.createObjectURL(file));
+  const clearOutcome = () => {
+    runId.current += 1;
+    setLoadingPred(false);
     setResults(null);
     setDetectError("");
     setLatestImageId(null);
+  };
+
+  const loadFile = (file: File) => {
+    clearOutcome();
+    setImage(file);
     setImageFileName(file.name);
-  }, []);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) loadFile(file);
+    e.target.value = ""; // allow re-selecting the same file after Reset
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -77,6 +88,7 @@ export function Detector() {
 
   const handleDetect = async () => {
     if (!image) return;
+    const id = ++runId.current;
     setDetectError("");
     setLoadingPred(true);
     setLatestImageId(null);
@@ -84,53 +96,57 @@ export function Detector() {
       const data = await predict(image, threshold, model, {
         explain: model === "faster-rcnn",
       });
+      if (id !== runId.current) return;
       setResults(data);
-    } catch (err: any) {
-      setDetectError(err.message || "Detection failed");
+      setLatestImageId(data.image_id ?? null);
+    } catch (err) {
+      if (id === runId.current) setDetectError(messageOf(err, "Detection failed"));
     } finally {
-      setLoadingPred(false);
+      if (id === runId.current) setLoadingPred(false);
     }
   };
 
   /* ---------- Report ---------- */
 
-  const downloadReport = async () => {
+  const handleDownloadReport = async () => {
     if (!latestImageId) return;
-    const url = getReportUrl(latestImageId);
-    const resp = await authFetch(url);
-    if (!resp.ok) { setDetectError("Failed to generate report"); return; }
-    const blob = await resp.blob();
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `report-${latestImageId}.pdf`;
-    link.click();
+    try {
+      await downloadReport(latestImageId);
+    } catch (err) {
+      setDetectError(messageOf(err, "Failed to generate report"));
+    }
   };
-
-  /* (measurement tool moved into ScanViewer) */
 
   /* ---------- Reset ---------- */
 
   const reset = () => {
+    clearOutcome();
     setImage(null);
-    setPreview(null);
-    setResults(null);
-    setDetectError("");
-    setLatestImageId(null);
     setImageFileName("");
   };
 
   /* ─── Computed values for sidebar ─── */
-  const visibleCount = results
-    ? results.boxes.filter((_, i) => (results.scores[i] ?? 0) >= threshold).length
-    : 0;
+  const visible = results ? visibleDetections(results, threshold) : [];
+  const tumors = visible.filter((d) => isTumor(d.labelName));
   const avgConfidence =
-    results && visibleCount > 0
-      ? ((results.scores.filter((s) => s >= threshold).reduce((a, b) => a + b, 0) /
-          visibleCount) *
-          100).toFixed(1)
+    visible.length > 0
+      ? ((visible.reduce((sum, d) => sum + d.score, 0) / visible.length) * 100).toFixed(1)
       : null;
-  const topLabel =
-    results?.label_names?.[results.scores.findIndex((s) => s >= threshold)] ?? null;
+  const topDetection = visible.reduce<(typeof visible)[number] | null>(
+    (best, d) => (!best || d.score > best.score ? d : best),
+    null,
+  );
+  const topLabel = topDetection ? displayLabel(topDetection.labelName) : null;
+
+  const thresholdRow = (
+    <div className="threshold-row">
+      <Sliders size={16} />
+      <span className="threshold-label">
+        Confidence: <strong>{(threshold * 100).toFixed(0)}%</strong>
+      </span>
+      <ConfidenceSlider value={threshold} onChange={setThreshold} />
+    </div>
+  );
 
   return (
     <div className="page-container">
@@ -148,14 +164,20 @@ export function Detector() {
         <div className="detector-main">
           <div className="glass-card">
             {useWebcam ? (
-              <WebcamCapture model={model} threshold={threshold}
-                onResult={(r) => setResults(r)} onError={(e) => setDetectError(e)} />
+              <>
+                <WebcamCapture model={model} threshold={threshold}
+                  onResult={(r) => {
+                    setResults(r);
+                    setLatestImageId(r.image_id ?? null);
+                  }} onError={(e) => setDetectError(e)} />
+                {thresholdRow}
+              </>
             ) : !preview ? (
               <label className={`upload-zone${isDragging ? " dragover" : ""}`}
                 onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
                 <input ref={fileInputRef} type="file" hidden accept="image/*" onChange={handleFileChange} />
                 <Upload size={48} className="mb-4" />
-                <p>Drop MRI DICOM or JPEG here</p>
+                <p>Drop an MRI image (JPEG or PNG) here</p>
                 <p className="text-muted" style={{ fontSize: "0.85rem", marginTop: "0.3rem" }}>
                   Supports T1, T2, and FLAIR weighted sequences
                 </p>
@@ -164,15 +186,7 @@ export function Detector() {
               <div className="text-center">
                 <ScanViewer imageUrl={preview} results={results} threshold={threshold} />
 
-                {/* Threshold slider */}
-                <div className="threshold-row">
-                  <Sliders size={16} />
-                  <label className="threshold-label">
-                    Confidence: <strong>{(threshold * 100).toFixed(0)}%</strong>
-                  </label>
-                  <input type="range" min="0.05" max="0.95" step="0.05" value={threshold}
-                    onChange={(e) => setThreshold(parseFloat(e.target.value))} className="threshold-slider" />
-                </div>
+                {thresholdRow}
 
                 {/* Action buttons */}
                 <div className="action-row">
@@ -180,16 +194,24 @@ export function Detector() {
                   <button className="btn btn-primary" onClick={handleDetect} disabled={loadingPred}>
                     {loadingPred ? <><span className="spinner-small" /> Processing&hellip;</> : "Detect"}
                   </button>
-                  {results && <button className="btn btn-secondary" onClick={downloadReport}><FileText size={18} /> Report</button>}
+                  {results && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleDownloadReport}
+                      disabled={!latestImageId}
+                    >
+                      <FileText size={18} /> Report
+                    </button>
+                  )}
                 </div>
               </div>
             )}
           </div>
 
           {/* Results stats below viewer */}
-          {results && !useWebcam && visibleCount > 0 && (
+          {results && !useWebcam && visible.length > 0 && (
             <div className="stats">
-              <div className="stat-card"><h3>Detections</h3><p className="stat-value">{visibleCount}</p></div>
+              <div className="stat-card"><h3>Detections</h3><p className="stat-value">{visible.length}</p></div>
               <div className="stat-card"><h3>Avg Score</h3><p className="stat-value">{avgConfidence}%</p></div>
               {topLabel && (
                 <div className="stat-card"><h3>Top Class</h3><p className="stat-value-sm">{topLabel}</p></div>
@@ -197,7 +219,7 @@ export function Detector() {
             </div>
           )}
 
-          {results && !useWebcam && visibleCount === 0 && (
+          {results && !useWebcam && tumors.length === 0 && (
             <div className="no-detections">
               <AlertCircle size={24} />
               <p><strong>No tumors detected</strong> above {(threshold * 100).toFixed(0)}% confidence.</p>
@@ -214,12 +236,12 @@ export function Detector() {
               <CheckCircle size={20} />
             </div>
             <div className="metric-card-body">
-              <div className="metric-card-value">{results ? results.boxes.length : "—"}</div>
+              <div className="metric-card-value">{results ? visible.length : "—"}</div>
               <div className="metric-card-label">Detections Found</div>
-              {results && results.boxes.length > 0 && (
+              {tumors.length > 0 && (
                 <div className="metric-card-label-sub">
                   <CheckCircle size={10} />
-                  Confirmed regions
+                  {tumors.length} tumor region{tumors.length === 1 ? "" : "s"}
                 </div>
               )}
             </div>
@@ -249,35 +271,33 @@ export function Detector() {
               <div className="metric-card-body">
                 <div className="metric-card-value" style={{ fontSize: "1rem" }}>{topLabel}</div>
                 <div className="metric-card-label">Primary Classification</div>
-                <div className="metric-card-label-sub">
-                  Localization: Temporal Lobe (Left)
-                </div>
               </div>
             </div>
           )}
 
-          {/* DICOM Metadata */}
           <div className="metadata-card">
             <div className="metadata-title">
               <Server size={14} />
-              DICOM Metadata
+              Scan
             </div>
             <div className="metadata-grid">
               <div className="metadata-item">
-                <span className="metadata-key">Patient ID</span>
-                <span className="metadata-value">NS-{latestImageId ? String(latestImageId).padStart(4, "0") : "—"}</span>
+                <span className="metadata-key">Scan ID</span>
+                <span className="metadata-value">
+                  {latestImageId ? `IMG-${String(latestImageId).padStart(6, "0")}` : "—"}
+                </span>
               </div>
               <div className="metadata-item">
-                <span className="metadata-key">Sequence</span>
-                <span className="metadata-value">T2-FLAIR</span>
+                <span className="metadata-key">File</span>
+                <span className="metadata-value">{imageFileName || "—"}</span>
               </div>
               <div className="metadata-item">
-                <span className="metadata-key">Slices</span>
-                <span className="metadata-value">128</span>
+                <span className="metadata-key">Model</span>
+                <span className="metadata-value">{results?.model_type || model}</span>
               </div>
               <div className="metadata-item">
-                <span className="metadata-key">Spacing</span>
-                <span className="metadata-value">1.0mm</span>
+                <span className="metadata-key">Version</span>
+                <span className="metadata-value">{results?.model_version || "—"}</span>
               </div>
             </div>
           </div>
@@ -322,28 +342,19 @@ export function Detector() {
                 {useWebcam ? "Upload" : "Webcam"}
               </button>
             </div>
-            <div className="control-row">
-              <span className="control-label">
-                <Server size={12} />
-                Device
-              </span>
-              <span className="control-value" style={{ fontSize: "0.75rem" }}>
-                <Wifi size={10} style={{ color: "var(--accent)", marginRight: "0.2rem" }} />
-                GPU
-              </span>
-            </div>
-            <div className="control-row">
-              <span className="control-label">
-                <Activity size={12} />
-                Latency
-              </span>
-              <span className="control-value" style={{ fontSize: "0.75rem" }}>
-                {loadingPred ? "processing…" : results ? "42ms" : "—"}
-              </span>
-            </div>
+            {loadingPred && (
+              <div className="control-row">
+                <span className="control-label">
+                  <Activity size={12} />
+                  Status
+                </span>
+                <span className="control-value" style={{ fontSize: "0.75rem" }}>
+                  processing…
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Upload CTA when no image loaded */}
           {!preview && !useWebcam && (
             <button
               className="btn btn-primary"

@@ -1,13 +1,17 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, Download, FileText, AlertCircle } from "lucide-react";
-import { authFetch } from "../lib/session";
 import {
-  getReportUrl,
+  messageOf,
+  downloadReport,
+  fetchImageBlob,
   listImages,
-  detectionsToPredictionResult,
+  imageToPredictionResult,
   type PredictionResult,
 } from "../lib/api";
+import { DEFAULT_CONFIDENCE, displayLabel, visibleDetections } from "../lib/detections";
+import { downloadBlob } from "../lib/download";
 import { drawScan } from "../lib/drawScan";
+import { ConfidenceSlider } from "./ConfidenceSlider";
 
 interface ImageViewerProps {
   imageId: number;
@@ -17,106 +21,102 @@ interface ImageViewerProps {
 
 export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [imageReady, setImageReady] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [threshold, setThreshold] = useState(0.5);
+  const [threshold, setThreshold] = useState(DEFAULT_CONFIDENCE);
   const [fallbackResults, setFallbackResults] = useState<PredictionResult | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   // When opened via URL (deep link / refresh) no in-memory results exist;
   // fall back to the detections persisted on the backend.
   useEffect(() => {
+    setFallbackResults(null);
     if (results) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const images = await listImages();
+    listImages()
+      .then((images) => {
         const img = images.find((i) => i.id === imageId);
         if (!cancelled && img) {
-          setFallbackResults(detectionsToPredictionResult(img.detections));
+          setFallbackResults(imageToPredictionResult(img));
         }
-      } catch {
+      })
+      .catch(() => {
         // Annotations are optional; the raw image still renders.
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
   }, [imageId, results]);
 
   const effectiveResults = results ?? fallbackResults;
-  const visibleBoxes =
-    effectiveResults?.boxes.filter((_, i) => (effectiveResults.scores[i] ?? 0) >= threshold) ??
-    [];
-  const visibleLabels =
-    effectiveResults?.label_names?.filter(
-      (_, i) => (effectiveResults.scores[i] ?? 0) >= threshold,
-    ) ?? [];
+  const visible = effectiveResults ? visibleDetections(effectiveResults, threshold) : [];
+  const topDetection = visible.reduce<(typeof visible)[number] | null>(
+    (best, d) => (!best || d.score > best.score ? d : best),
+    null,
+  );
 
+  // Protected image: fetch with the Bearer token and own the object URL's lifetime.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const res = await authFetch(`/images/${imageId}`);
-        if (!res.ok) throw new Error("Failed to load image");
-        const blob = await res.blob();
+    let url: string | null = null;
+    setBlobUrl(null);
+    setImageReady(false);
+    setError("");
+    setLoading(true);
+    fetchImageBlob(imageId)
+      .then((blob) => {
         if (cancelled) return;
-        setBlobUrl(URL.createObjectURL(blob));
-      } catch (err: any) {
-        if (!cancelled) setError(err.message || "Failed to load image");
-      } finally {
+        url = URL.createObjectURL(blob);
+        setBlobUrl(url);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(messageOf(err, "Failed to load image"));
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+      });
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
   }, [imageId]);
 
-  // Draw annotations once the image loads
+  // Draw the scan (annotated when results exist) once the image has decoded.
   useEffect(() => {
-    if (!effectiveResults || !canvasRef.current || !imgRef.current) return;
-    const ctx = canvasRef.current.getContext("2d");
+    const canvas = canvasRef.current;
     const img = imgRef.current;
-    if (!ctx) return;
-
-    const onLoad = () => {
-      drawScan(ctx, img, {
-        boxes: effectiveResults.boxes,
-        labels: effectiveResults.labels,
-        scores: effectiveResults.scores,
-        label_names: effectiveResults.label_names,
-        threshold,
-      });
-    };
-
-    if (img.complete && img.naturalWidth) {
-      onLoad();
-    } else {
-      img.onload = onLoad;
-    }
-  }, [effectiveResults, blobUrl, threshold]);
+    const ctx = canvas?.getContext("2d");
+    if (!imageReady || !img || !ctx) return;
+    drawScan(ctx, img, {
+      boxes: effectiveResults?.boxes ?? [],
+      labels: effectiveResults?.labels ?? [],
+      scores: effectiveResults?.scores ?? [],
+      label_names: effectiveResults?.label_names,
+      threshold,
+    });
+  }, [effectiveResults, imageReady, threshold]);
 
   const handleDownloadReport = async () => {
-    const url = getReportUrl(imageId);
-    const resp = await authFetch(url);
-    if (!resp.ok) { setError("Failed to generate report"); return; }
-    const blob = await resp.blob();
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `report-${imageId}.pdf`;
-    link.click();
+    try {
+      await downloadReport(imageId);
+    } catch (err) {
+      setError(messageOf(err, "Failed to generate report"));
+    }
   };
 
   const handleDownloadAnnotated = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `scan-${imageId}.png`;
-        link.click();
-      }
+    canvasRef.current?.toBlob((blob) => {
+      if (blob) downloadBlob(blob, `scan-${imageId}.png`);
     });
   };
 
@@ -138,9 +138,7 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
           </button>
           <label className="threshold-label" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             Conf: <strong>{(threshold * 100).toFixed(0)}%</strong>
-            <input type="range" min="0.05" max="0.95" step="0.05" value={threshold}
-              onChange={(e) => setThreshold(parseFloat(e.target.value))}
-              className="threshold-slider" style={{ width: "7rem" }} />
+            <ConfidenceSlider value={threshold} onChange={setThreshold} style={{ width: "7rem" }} />
           </label>
         </div>
 
@@ -165,6 +163,7 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
                 src={blobUrl}
                 alt="Scan"
                 style={{ display: "none" }}
+                onLoad={() => setImageReady(true)}
               />
               <canvas ref={canvasRef} className="viewer-canvas" />
             </>
@@ -172,12 +171,10 @@ export function ImageViewer({ imageId, results, onClose }: ImageViewerProps) {
         </div>
 
         {/* Detection summary */}
-        {visibleBoxes.length > 0 && (
+        {topDetection && (
           <div className="viewer-summary">
-            <p><strong>{visibleBoxes.length}</strong> detection{visibleBoxes.length !== 1 ? "s" : ""}</p>
-            {visibleLabels.length > 0 && (
-              <p>Top class: <strong>{visibleLabels[0]}</strong></p>
-            )}
+            <p><strong>{visible.length}</strong> detection{visible.length !== 1 ? "s" : ""}</p>
+            <p>Top class: <strong>{displayLabel(topDetection.labelName)}</strong></p>
           </div>
         )}
       </div>

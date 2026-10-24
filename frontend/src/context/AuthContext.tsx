@@ -1,4 +1,4 @@
-import React, {
+import {
   createContext,
   useContext,
   useState,
@@ -7,13 +7,17 @@ import React, {
   type ReactNode,
 } from "react";
 import {
-  authFetch,
   isAuthenticated,
   logout as apiLogout,
   processOAuthTokens,
   refreshTokens,
 } from "../lib/session";
-import { login as apiLogin, register as apiRegister, type UserInfo } from "../lib/api";
+import {
+  fetchCurrentUser,
+  login as apiLogin,
+  register as apiRegister,
+  type UserInfo,
+} from "../lib/api";
 
 /* ---------- Types ---------- */
 
@@ -23,6 +27,8 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
+  user: UserInfo | null;
+  setUser: (user: UserInfo) => void;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, username: string, password: string) => Promise<void>;
   logout: () => void;
@@ -38,20 +44,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuth: false,
     loading: true,
   });
+  const [user, setUser] = useState<UserInfo | null>(null);
 
   // On mount: if we have a token, try to refresh it (validates it's still good)
   useEffect(() => {
-    if (isAuthenticated()) {
-      refreshTokens()
-        .then((ok) => {
-          setState({ isAuth: ok, loading: false });
-          if (!ok) apiLogout();
-        })
-        .catch(() => setState({ isAuth: false, loading: false }));
-    } else {
+    if (!isAuthenticated()) {
       setState({ isAuth: false, loading: false });
+      return;
     }
+    refreshTokens()
+      .then((ok) => {
+        if (!ok) apiLogout();
+        setState({ isAuth: ok, loading: false });
+      })
+      // Server unreachable: the session is not proven dead, keep the tokens.
+      .catch(() => setState({ isAuth: true, loading: false }));
   }, []);
+
+  // Load the signed-in user's profile whenever a session becomes active.
+  useEffect(() => {
+    if (!state.isAuth) {
+      setUser(null);
+      return;
+    }
+    let cancelled = false;
+    fetchCurrentUser()
+      .then((u) => {
+        if (!cancelled) setUser(u);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [state.isAuth]);
 
   // Session died mid-request (refresh failed in authFetch) → force logout state
   // so RequireAuth redirects to /login.
@@ -80,13 +105,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const handleOAuthCallback = useCallback(() => {
-    processOAuthTokens();
-    setState({ isAuth: isAuthenticated(), loading: false });
+    // Rejected callbacks (bad state, or a StrictMode re-run after the fragment
+    // was consumed) must not clobber an already-established session.
+    if (processOAuthTokens()) setState({ isAuth: true, loading: false });
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ ...state, login, register, logout, handleOAuthCallback }}
+      value={{ ...state, user, setUser, login, register, logout, handleOAuthCallback }}
     >
       {children}
     </AuthContext.Provider>

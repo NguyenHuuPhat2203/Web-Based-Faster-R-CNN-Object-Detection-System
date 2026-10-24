@@ -1,24 +1,34 @@
-import React, { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  Clock,
   AlertCircle,
   Image as ImageIcon,
   Trash2,
   FileText,
   Search,
-  Filter,
   ArrowUpDown,
   Upload,
+  RotateCcw,
 } from "lucide-react";
 import { useNavigate, useOutletContext } from "react-router-dom";
-import { authFetch } from "../lib/session";
 import {
+  messageOf,
   listImages,
-  getImageUrl,
-  getReportUrl,
-  detectionsToPredictionResult,
+  deleteImage,
+  downloadReport,
+  fetchImageBlob,
+  confirmedDetections,
+  imageToPredictionResult,
+  predict,
   type ImageInfo,
 } from "../lib/api";
+import {
+  filterHistory,
+  otherModel,
+  type HistoryDetectionFilter,
+  type HistoryModelFilter,
+  type HistorySort,
+} from "../lib/historyList";
+import { useImageBlobUrls } from "../lib/useImageBlobUrls";
 import type { LayoutOutletContext } from "./DashboardLayout";
 
 /* ─── Scan type distribution for badges ─── */
@@ -35,7 +45,6 @@ function getScanBadge(filename: string): { badge: string; label: string } | null
   for (const st of SCAN_TYPES) {
     if (lower.includes(st.pattern)) return { badge: st.badge, label: st.label };
   }
-  // Default based on id hash
   return null;
 }
 
@@ -45,66 +54,74 @@ export function History() {
   const [images, setImages] = useState<ImageInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Row-level failures (delete, report, re-run) must not hide the loaded list.
+  const [actionError, setActionError] = useState("");
   const [search, setSearch] = useState("");
+  const [modelFilter, setModelFilter] = useState<HistoryModelFilter>("all");
+  const [detectionFilter, setDetectionFilter] = useState<HistoryDetectionFilter>("all");
+  const [sort, setSort] = useState<HistorySort>("newest");
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
+  const [rerunningId, setRerunningId] = useState<number | null>(null);
 
-  const fetchImages = () => {
-    setLoading(true);
+  const fetchImages = useCallback((showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     setError("");
     listImages()
       .then(setImages)
-      .catch((err) => setError(err.message || "Failed to load images"))
+      .catch((err) => setError(messageOf(err, "Failed to load images")))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
-  useEffect(() => { fetchImages(); }, []);
+  useEffect(() => { fetchImages(); }, [fetchImages]);
 
-  // Fetch thumbnails via authFetch
-  useEffect(() => {
-    if (images.length === 0) return;
-    for (const img of images) {
-      if (thumbnails[img.id]) continue;
-      authFetch(`/images/${img.id}`)
-        .then((r) => (r.ok ? r.blob() : null))
-        .then((blob) => {
-          if (blob) {
-            const url = URL.createObjectURL(blob);
-            setThumbnails((prev) => ({ ...prev, [img.id]: url }));
-          }
-        })
-        .catch(() => {});
-    }
-  }, [images]);
+  const thumbnails = useImageBlobUrls(images.map((img) => img.id));
 
   const handleDelete = async (id: number) => {
     if (!window.confirm("Delete this scan? This action cannot be undone.")) return;
     setDeletingId(id);
     try {
-      const res = await authFetch(`/images/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Delete failed");
+      await deleteImage(id);
       setImages((prev) => prev.filter((img) => img.id !== id));
-    } catch (err: any) {
-      setError(err.message || "Failed to delete image");
+    } catch (err) {
+      setActionError(messageOf(err, "Failed to delete image"));
     } finally {
       setDeletingId(null);
     }
   };
 
   const handleDownloadReport = async (id: number) => {
-    const url = getReportUrl(id);
-    const resp = await authFetch(url);
-    if (!resp.ok) { setError("Failed to generate report"); return; }
-    const blob = await resp.blob();
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `report-${id}.pdf`;
-    link.click();
+    try {
+      await downloadReport(id);
+    } catch (err) {
+      setActionError(messageOf(err, "Failed to generate report"));
+    }
   };
 
-  const filtered = images.filter((img) =>
-    img.original_name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const handleRerun = async (img: ImageInfo) => {
+    setRerunningId(img.id);
+    setActionError("");
+    try {
+      const blob = await fetchImageBlob(img.id);
+      const file = new File([blob], img.original_name, {
+        type: img.mime_type || "image/png",
+      });
+      await predict(file, img.threshold ?? 0.5, otherModel(img.model_type));
+      fetchImages(false);
+    } catch (err) {
+      setActionError(messageOf(err, "Re-run failed"));
+    } finally {
+      setRerunningId(null);
+    }
+  };
+
+  const filtered = filterHistory(images, {
+    search,
+    model: modelFilter,
+    detections: detectionFilter,
+    sort,
+  });
+  const hasFilters =
+    Boolean(search.trim()) || modelFilter !== "all" || detectionFilter !== "all";
 
   return (
     <div className="page-container">
@@ -127,22 +144,47 @@ export function History() {
                 className="search-input"
               />
             </div>
-            <button className="btn btn-ghost" style={{ width: "auto", padding: "0.5rem 0.75rem" }} title="Filter">
-              <Filter size={16} />
-            </button>
-            <button className="btn btn-ghost" style={{ width: "auto", padding: "0.5rem 0.75rem" }} title="Sort">
+            <select
+              className="search-input"
+              value={modelFilter}
+              onChange={(e) => setModelFilter(e.target.value as HistoryModelFilter)}
+              title="Filter by model"
+              style={{ width: "auto", padding: "0.5rem 0.6rem" }}
+            >
+              <option value="all">All models</option>
+              <option value="faster-rcnn">Faster R-CNN</option>
+              <option value="yolov8">YOLOv8</option>
+            </select>
+            <select
+              className="search-input"
+              value={detectionFilter}
+              onChange={(e) => setDetectionFilter(e.target.value as HistoryDetectionFilter)}
+              title="Filter by detections"
+              style={{ width: "auto", padding: "0.5rem 0.6rem" }}
+            >
+              <option value="all">All scans</option>
+              <option value="with">With detections</option>
+              <option value="without">No detections</option>
+            </select>
+            <button
+              className="btn btn-ghost"
+              style={{ width: "auto", padding: "0.5rem 0.75rem" }}
+              title={sort === "newest" ? "Newest first" : "Oldest first"}
+              onClick={() => setSort(sort === "newest" ? "oldest" : "newest")}
+            >
               <ArrowUpDown size={16} />
+              {sort === "newest" ? "Newest" : "Oldest"}
             </button>
           </div>
         )}
       </div>
 
-      {error && (
+      {(error || actionError) && (
         <div className="auth-error" style={{ marginBottom: "1rem" }}>
           <AlertCircle size={18} />
-          <span>{error}</span>
-          <button className="btn btn-ghost" onClick={fetchImages} style={{ marginLeft: "auto", width: "auto", padding: "0.3rem 0.8rem" }}>
-            Retry
+          <span>{error || actionError}</span>
+          <button className="btn btn-ghost" onClick={error ? () => fetchImages() : () => setActionError("")} style={{ marginLeft: "auto", width: "auto", padding: "0.3rem 0.8rem" }}>
+            {error ? "Retry" : "Dismiss"}
           </button>
         </div>
       )}
@@ -157,8 +199,8 @@ export function History() {
       {!loading && !error && filtered.length === 0 && (
         <div className="empty-state">
           <ImageIcon size={48} />
-          <p>{search ? "No images match your search." : "No scans yet. Upload an MRI to get started."}</p>
-          {!search && (
+          <p>{hasFilters ? "No images match your filters." : "No scans yet. Upload an MRI to get started."}</p>
+          {!hasFilters && (
             <button className="btn btn-primary" onClick={() => navigate("/detector")}>
               <Upload size={16} /> Upload Your First Scan
             </button>
@@ -166,7 +208,7 @@ export function History() {
         </div>
       )}
 
-      {!loading && !error && filtered.length > 0 && (
+      {!loading && filtered.length > 0 && (
         <div className="history-list">
           {filtered.map((img) => {
             const scanBadge = getScanBadge(img.original_name);
@@ -174,14 +216,17 @@ export function History() {
               <div
                 key={img.id}
                 className="history-list-item"
-                onClick={() => onViewImage(img.id, img.detections.length > 0 ? detectionsToPredictionResult(img.detections) : null)}
+                onClick={() => onViewImage(img.id, imageToPredictionResult(img))}
               >
-                <img
-                  src={thumbnails[img.id] || getImageUrl(img.id)}
-                  alt={img.original_name}
-                  className="history-list-thumb"
-                  loading="lazy"
-                />
+                {thumbnails[img.id] ? (
+                  <img
+                    src={thumbnails[img.id]}
+                    alt={img.original_name}
+                    className="history-list-thumb"
+                  />
+                ) : (
+                  <div className="history-list-thumb" />
+                )}
                 <div className="history-list-body">
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <span className="history-list-name">{img.original_name}</span>
@@ -192,10 +237,27 @@ export function History() {
                   <div className="history-list-meta">
                     <span>{new Date(img.uploaded_at).toLocaleDateString()}</span>
                     <span style={{ color: "var(--text-secondary)" }}>•</span>
-                    <span>{img.detections.length} detections</span>
+                    <span>{confirmedDetections(img).length} detections</span>
+                    {img.model_type && (
+                      <>
+                        <span style={{ color: "var(--text-secondary)" }}>•</span>
+                        <span>
+                          {img.model_type}
+                          {img.model_version ? ` ${img.model_version}` : ""}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="history-list-actions">
+                  <button
+                    className="btn btn-tiny"
+                    onClick={(e) => { e.stopPropagation(); handleRerun(img); }}
+                    disabled={rerunningId === img.id}
+                    title={`Re-run with ${otherModel(img.model_type)}`}
+                  >
+                    {rerunningId === img.id ? <span className="spinner-small" /> : <RotateCcw size={14} />}
+                  </button>
                   <button
                     className="btn btn-tiny"
                     onClick={(e) => { e.stopPropagation(); handleDownloadReport(img.id); }}

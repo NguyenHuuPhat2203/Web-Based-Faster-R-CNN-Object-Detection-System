@@ -1,6 +1,25 @@
-import { API_BASE, authFetch, processOAuthTokens, setTokens } from "./session";
+import { API_BASE, authFetch, setTokens } from "./session";
+import { downloadBlob } from "./download";
 
-export { processOAuthTokens };
+/** Message of a caught value, for surfacing in the UI. */
+export function messageOf(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
+/** Human-readable message from a FastAPI error body (`detail` as string or validation list). */
+async function errorDetail(res: Response, fallback: string): Promise<string> {
+  const body = await res.json().catch(() => null);
+  const detail = body?.detail;
+  if (typeof detail === "string" && detail) return detail;
+  if (Array.isArray(detail)) {
+    const msg = detail
+      .map((d: { msg?: string }) => d.msg)
+      .filter(Boolean)
+      .join("; ");
+    if (msg) return msg;
+  }
+  return fallback;
+}
 
 /* ---------- Auth API calls ---------- */
 
@@ -11,59 +30,62 @@ export interface UserInfo {
   created_at: string;
 }
 
-export interface LoginResponse {
-  id: number;
-  email: string;
-  username: string;
-  created_at: string;
+export interface LoginResponse extends UserInfo {
   access_token: string;
   refresh_token: string;
 }
 
-export async function register(
+async function submitCredentials(
+  path: string,
+  body: Record<string, string>,
+  fallback: string,
+): Promise<LoginResponse> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, fallback));
+  const data: LoginResponse = await res.json();
+  setTokens(data.access_token, data.refresh_token);
+  return data;
+}
+
+export function register(
   email: string,
   username: string,
   password: string,
 ): Promise<LoginResponse> {
-  const res = await fetch(`${API_BASE}/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, username, password }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Registration failed" }));
-    throw new Error(err.detail || "Registration failed");
-  }
-  const data: LoginResponse = await res.json();
-  setTokens(data.access_token, data.refresh_token);
-  return data;
+  return submitCredentials(
+    "/auth/register",
+    { email, username, password },
+    "Registration failed",
+  );
 }
 
-export async function login(
-  email: string,
-  password: string,
-): Promise<LoginResponse> {
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Login failed" }));
-    throw new Error(err.detail || "Login failed");
-  }
-  const data: LoginResponse = await res.json();
-  setTokens(data.access_token, data.refresh_token);
-  return data;
+export function login(email: string, password: string): Promise<LoginResponse> {
+  return submitCredentials("/auth/login", { email, password }, "Login failed");
 }
 
-export function getGoogleAuthUrl(): string {
-  return `${API_BASE}/auth/google`;
+/** Begin the Google OAuth flow: remember the CSRF state, then leave for Google. */
+export async function startGoogleLogin(): Promise<void> {
+  const res = await fetch(`${API_BASE}/auth/google`, { credentials: "include" });
+  if (!res.ok) throw new Error(await errorDetail(res, "Failed to initiate Google login"));
+  const data: { redirect_url: string; state: string } = await res.json();
+  sessionStorage.setItem("oauth_state", data.state);
+  window.location.href = data.redirect_url;
+}
+
+export async function fetchCurrentUser(): Promise<UserInfo> {
+  const res = await authFetch("/auth/me");
+  if (!res.ok) throw new Error(await errorDetail(res, "Failed to load profile"));
+  return res.json();
 }
 
 /* ---------- Predict API ---------- */
 
 export interface PredictionResult {
+  /** xyxy in original image pixels. */
   boxes: number[][];
   labels: number[];
   scores: number[];
@@ -71,14 +93,15 @@ export interface PredictionResult {
   heatmap?: string | null; // base64 PNG, only for Faster R-CNN
   model_type?: string | null;
   model_version?: string | null;
+  image_id?: number | null;
 }
 
 export type ModelType = "faster-rcnn" | "yolov8";
 
-export type ApiVersion = "v1" | "v2";
+type ApiVersion = "v1" | "v2";
 
 /** Backend API contract version. Default v2; set VITE_API_VERSION=v1 to rollback. */
-export const API_VERSION: ApiVersion =
+const API_VERSION: ApiVersion =
   import.meta.env.VITE_API_VERSION === "v1" ? "v1" : "v2";
 
 export interface PredictOptions {
@@ -123,49 +146,44 @@ export async function predict(
   const formData = new FormData();
   formData.append("file", file);
 
-  const explain = options.explain ?? false;
-  let endpoint: string;
-
+  // The server reads threshold only from the query string, on every endpoint.
+  const params = new URLSearchParams({ threshold: String(threshold) });
+  let path: string;
   if (API_VERSION === "v2") {
-    const params = new URLSearchParams({
-      threshold: String(threshold),
-    });
     if (model === "faster-rcnn") {
-      params.set("explain", explain ? "true" : "false");
-      endpoint = `/v2/predict?${params.toString()}`;
+      params.set("explain", options.explain ? "true" : "false");
+      path = "/v2/predict";
     } else {
-      endpoint = `/v2/predict/yolo?${params.toString()}`;
+      path = "/v2/predict/yolo";
     }
   } else {
-    // v1 bare contract — threshold in form body (legacy)
-    formData.append("threshold", String(threshold));
-    endpoint = model === "yolov8" ? "/predict-yolo" : "/predict";
+    path = model === "yolov8" ? "/predict-yolo" : "/predict";
   }
+  const endpoint = `${path}?${params.toString()}`;
 
-  const res = await authFetch(endpoint, {
-    method: "POST",
-    body: formData,
-  });
+  const res = await authFetch(endpoint, { method: "POST", body: formData });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Prediction failed" }));
-    const detail =
-      typeof err.detail === "string"
-        ? err.detail
-        : Array.isArray(err.detail)
-          ? err.detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join("; ")
-          : "Prediction failed";
-    throw formatPredictError(detail || "Prediction failed", res);
+    throw formatPredictError(await errorDetail(res, "Prediction failed"), res);
   }
 
   const data = await res.json();
-  if (API_VERSION === "v2") {
-    return unwrapV2Prediction(data, res);
-  }
-  return data as PredictionResult;
+  return API_VERSION === "v2"
+    ? unwrapV2Prediction(data, res)
+    : (data as PredictionResult);
 }
 
 /* ---------- Images API ---------- */
+
+export interface DetectionInfo {
+  label: number;
+  label_name: string;
+  score: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
 
 export interface ImageInfo {
   id: number;
@@ -181,18 +199,18 @@ export interface ImageInfo {
   detections: DetectionInfo[];
 }
 
-export interface DetectionInfo {
-  label: number;
-  label_name: string;
-  score: number;
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
+/**
+ * Detections the user's threshold confirmed. The server stores everything down to
+ * its 0.1 floor, so lists, counts and reports must apply the image's own threshold.
+ */
+export function confirmedDetections(image: ImageInfo): DetectionInfo[] {
+  const min = image.threshold ?? 0;
+  return image.detections.filter((d) => d.score >= min);
 }
 
-/** Convert the backend's detections array to the PredictionResult format used by the Detector. */
-export function detectionsToPredictionResult(detections: DetectionInfo[]): PredictionResult {
+/** Stored image detections in the PredictionResult shape used by the viewers. */
+export function imageToPredictionResult(image: ImageInfo): PredictionResult {
+  const detections = confirmedDetections(image);
   return {
     boxes: detections.map((d) => [d.x1, d.y1, d.x2, d.y2]),
     labels: detections.map((d) => d.label),
@@ -203,17 +221,28 @@ export function detectionsToPredictionResult(detections: DetectionInfo[]): Predi
 
 export async function listImages(): Promise<ImageInfo[]> {
   const res = await authFetch("/images");
-  if (!res.ok) throw new Error("Failed to fetch images");
+  if (!res.ok) throw new Error(await errorDetail(res, "Failed to fetch images"));
   const data = await res.json();
   return data.images;
 }
 
-export function getImageUrl(imageId: number): string {
-  return `${API_BASE}/images/${imageId}?t=${Date.now()}`;
+/** Image file as a blob; protected, so it cannot be used directly as an <img src>. */
+export async function fetchImageBlob(imageId: number): Promise<Blob> {
+  const res = await authFetch(`/images/${imageId}`);
+  if (!res.ok) throw new Error(await errorDetail(res, "Failed to load image"));
+  return res.blob();
 }
 
-export function getReportUrl(imageId: number): string {
-  return `${API_BASE}/images/${imageId}/report?t=${Date.now()}`;
+export async function deleteImage(imageId: number): Promise<void> {
+  const res = await authFetch(`/images/${imageId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await errorDetail(res, "Failed to delete image"));
+}
+
+/** Fetch the PDF report with the Bearer token and hand it to the browser as a download. */
+export async function downloadReport(imageId: number): Promise<void> {
+  const res = await authFetch(`/images/${imageId}/report`);
+  if (!res.ok) throw new Error(await errorDetail(res, "Failed to generate report"));
+  downloadBlob(await res.blob(), `report-${imageId}.pdf`);
 }
 
 /* ---------- Stats API ---------- */
@@ -226,11 +255,11 @@ export interface UserStats {
 
 export async function fetchUserStats(): Promise<UserStats> {
   const res = await authFetch("/auth/stats");
-  if (!res.ok) throw new Error("Failed to fetch stats");
+  if (!res.ok) throw new Error(await errorDetail(res, "Failed to fetch stats"));
   return res.json();
 }
 
-/* ---------- Case viewer (ticket 22) ---------- */
+/* ---------- Case viewer ---------- */
 
 export interface CaseVolume {
   ncr: number;
@@ -245,46 +274,43 @@ export interface CaseViewerCase {
   volumes_cm3: CaseVolume;
 }
 
-export interface CaseSlice {
-  slice_index: number;
-  slices: number;
-  base: string; // base64 PNG
-  mask: string; // base64 PNG (RGBA overlay)
+export interface SegmentationResult {
+  seconds: number;
+  volumes_cm3: CaseVolume;
 }
+
+export type CaseVolumeType = "t1ce" | "seg" | "pred";
 
 export async function listCaseViewerCases(): Promise<CaseViewerCase[]> {
   const res = await authFetch("/case-viewer/cases");
-  if (!res.ok) throw new Error("Failed to fetch cases");
+  if (!res.ok) throw new Error(await errorDetail(res, "Failed to fetch cases"));
   const data = await res.json();
   return data.cases;
 }
 
-export async function getCaseViewerSlice(
-  caseId: string,
-  z: number,
-): Promise<CaseSlice> {
-  const res = await authFetch(`/case-viewer/cases/${caseId}/slices/${z}`);
-  if (!res.ok) throw new Error("Failed to fetch slice");
-  return res.json();
-}
-
 export async function getCaseViewerVolume(
   caseId: string,
-  type: "t1ce" | "seg" | "pred",
+  type: CaseVolumeType,
 ): Promise<Blob> {
-  const res = await authFetch(`/case-viewer/cases/${caseId}/volume?type=${type}`);
-  if (!res.ok) throw new Error(`Failed to fetch ${type} volume`);
+  const res = await authFetch(
+    `/case-viewer/cases/${encodeURIComponent(caseId)}/volume?type=${type}`,
+  );
+  if (!res.ok) throw new Error(await errorDetail(res, `Failed to fetch ${type} volume`));
   return res.blob();
 }
 
-export async function segmentCaseViewerCase(
-  caseId: string,
-): Promise<{ seconds: number; volumes_cm3: Record<string, number> }> {
-  const res = await authFetch(`/case-viewer/cases/${caseId}/segment`, {
+/** Run model segmentation; the server reports region volumes keyed NCR/ED/ET. */
+export async function segmentCaseViewerCase(caseId: string): Promise<SegmentationResult> {
+  const res = await authFetch(`/case-viewer/cases/${encodeURIComponent(caseId)}/segment`, {
     method: "POST",
   });
-  if (!res.ok) throw new Error("Failed to segment case");
-  return res.json();
+  if (!res.ok) throw new Error(await errorDetail(res, "Failed to segment case"));
+  const data: { seconds: number; volumes_cm3: Record<string, number> } = await res.json();
+  const v = data.volumes_cm3;
+  const ncr = v.NCR ?? v.ncr ?? 0;
+  const ed = v.ED ?? v.ed ?? 0;
+  const et = v.ET ?? v.et ?? 0;
+  return { seconds: data.seconds, volumes_cm3: { ncr, ed, et, total: ncr + ed + et } };
 }
 
 /* ---------- Profile API ---------- */
@@ -300,14 +326,9 @@ export async function updateProfile(data: ProfileUpdate): Promise<UserInfo> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Update failed" }));
-    throw new Error(err.detail || "Update failed");
-  }
+  if (!res.ok) throw new Error(await errorDetail(res, "Update failed"));
   return res.json();
 }
-
-/* ---------- Password API ---------- */
 
 export async function changePassword(
   currentPassword: string,
@@ -321,8 +342,5 @@ export async function changePassword(
       new_password: newPassword,
     }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Password change failed" }));
-    throw new Error(err.detail || "Password change failed");
-  }
+  if (!res.ok) throw new Error(await errorDetail(res, "Password change failed"));
 }

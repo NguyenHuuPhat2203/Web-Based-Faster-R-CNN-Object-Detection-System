@@ -12,10 +12,10 @@ import {
   Info,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { updateProfile, changePassword } from "../lib/api";
+import { messageOf, updateProfile, changePassword, type ProfileUpdate } from "../lib/api";
 
 export function Settings() {
-  const { logout } = useAuth();
+  const { logout, user, setUser } = useAuth();
 
   // Profile state
   const [username, setUsername] = useState("");
@@ -36,7 +36,7 @@ export function Settings() {
     setProfileMsg(null);
     setProfileSubmitting(true);
     try {
-      const data: Record<string, string> = {};
+      const data: ProfileUpdate = {};
       if (username.trim()) data.username = username.trim();
       if (email.trim()) data.email = email.trim();
       if (Object.keys(data).length === 0) {
@@ -44,12 +44,12 @@ export function Settings() {
         setProfileSubmitting(false);
         return;
       }
-      await updateProfile(data);
+      setUser(await updateProfile(data));
       setProfileMsg({ type: "success", text: "Profile updated successfully!" });
       setUsername("");
       setEmail("");
-    } catch (err: any) {
-      setProfileMsg({ type: "error", text: err.message || "Update failed" });
+    } catch (err) {
+      setProfileMsg({ type: "error", text: messageOf(err, "Update failed") });
     } finally {
       setProfileSubmitting(false);
     }
@@ -75,8 +75,8 @@ export function Settings() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (err: any) {
-      setPasswordMsg({ type: "error", text: err.message || "Password change failed" });
+    } catch (err) {
+      setPasswordMsg({ type: "error", text: messageOf(err, "Password change failed") });
     } finally {
       setPasswordSubmitting(false);
     }
@@ -100,7 +100,7 @@ export function Settings() {
             <User size={18} />
             <input
               type="text"
-              placeholder="New username (leave blank to keep current)"
+              placeholder={`Username${user ? ` (current: ${user.username})` : ""}, leave blank to keep`}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               minLength={2}
@@ -110,7 +110,7 @@ export function Settings() {
             <Mail size={18} />
             <input
               type="email"
-              placeholder="New email (leave blank to keep current)"
+              placeholder={`Email${user ? ` (current: ${user.email})` : ""}, leave blank to keep`}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -185,10 +185,7 @@ export function Settings() {
             <Info size={16} style={{ color: "var(--text-secondary)", flexShrink: 0 }} />
             <div>
               <p style={{ fontSize: "0.82rem", color: "var(--text)" }}>
-                Department of Medical Informatics
-              </p>
-              <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                NeuroScan AI v2.4.1 • All data encrypted in transit
+                {user ? `Signed in as ${user.email}` : "NeuroScan AI"}
               </p>
             </div>
           </div>

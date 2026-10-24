@@ -1,20 +1,16 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Niivue } from "@niivue/niivue";
 import { Brain, AlertCircle, Boxes, Layers, Wand2 } from "lucide-react";
 import {
-  listCaseViewerCases,
   getCaseViewerVolume,
+  listCaseViewerCases,
+  messageOf,
   segmentCaseViewerCase,
   type CaseViewerCase,
+  type SegmentationResult,
 } from "../lib/api";
 
-// CDN UMD (cùng bản đã chạy ổn ở standalone) — bundle ESM npm hỏng trong
-// môi trường browser hạn chế của user (File.stream() cũng thiếu).
-function getNiivueCtor(): typeof Niivue {
-  const ns = (window as any).niivue;
-  if (!ns || !ns.Niivue) throw new Error("NiiVue CDN chưa tải — kiểm tra mạng");
-  return ns.Niivue;
-}
+type MaskSource = "expert" | "model";
 
 const REGION_META: { key: "ncr" | "ed" | "et"; label: string; color: string }[] = [
   { key: "et", label: "ET · enhancing", color: "#ef4444" },
@@ -22,7 +18,7 @@ const REGION_META: { key: "ncr" | "ed" | "et"; label: string; color: string }[] 
   { key: "ncr", label: "NCR · necrosis", color: "#f59e0b" },
 ];
 
-// BraTS labels 1=NCR, 2=ED, 4=ET — discrete label colormap cho NiiVue
+// BraTS labels 1=NCR, 2=ED, 4=ET: discrete label colormap for NiiVue
 const SEG_CMAP = {
   R: [0, 230, 60, 230],
   G: [0, 180, 230, 60],
@@ -32,6 +28,38 @@ const SEG_CMAP = {
   labels: ["bg", "NCR", "ED", "ET"],
 };
 
+/** Load the T1-CE base plus the chosen mask. Volumes are fetched with the Bearer token and handed to NiiVue as blob URLs. */
+async function loadCaseVolumes(nv: Niivue, caseId: string, mask: MaskSource): Promise<void> {
+  const [baseBlob, maskBlob] = await Promise.all([
+    getCaseViewerVolume(caseId, "t1ce"),
+    getCaseViewerVolume(caseId, mask === "expert" ? "seg" : "pred"),
+  ]);
+  const urls = [URL.createObjectURL(baseBlob), URL.createObjectURL(maskBlob)];
+  try {
+    await nv.loadVolumes([
+      { url: urls[0], name: "t1ce.nii.gz" },
+      // The model mask is served uncompressed, the expert mask gzipped; NiiVue keys on the name.
+      { url: urls[1], name: mask === "expert" ? "seg.nii.gz" : "seg.nii" },
+    ]);
+  } finally {
+    urls.forEach((url) => URL.revokeObjectURL(url));
+  }
+  const seg = nv.volumes[1];
+  if (seg) {
+    seg.setColormapLabel(SEG_CMAP);
+    seg.opacity = 0.9;
+  }
+}
+
+function applyView(nv: Niivue, view3d: boolean): void {
+  nv.setSliceType(view3d ? nv.sliceTypeRender : nv.sliceTypeMultiplanar);
+  if (view3d) nv.setRenderAzimuthElevation(45, 20);
+  nv.drawScene();
+}
+
+const pct = (part: number, total: number) =>
+  total > 0 ? ((part / total) * 100).toFixed(1) : "0.0";
+
 export function CaseViewer() {
   const [cases, setCases] = useState<CaseViewerCase[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,130 +68,115 @@ export function CaseViewer() {
   const [loadState, setLoadState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [view3d, setView3d] = useState(true);
   const [segState, setSegState] = useState<"idle" | "running" | "done" | "error">("idle");
-  const [maskSource, setMaskSource] = useState<"expert" | "model">("expert");
-  const [predMetrics, setPredMetrics] = useState<{ seconds: number; volumes_cm3: Record<string, number> } | null>(null);
-  const [diag, setDiag] = useState("");
+  const [maskSource, setMaskSource] = useState<MaskSource>("expert");
+  const [maskBusy, setMaskBusy] = useState(false);
+  const [predMetrics, setPredMetrics] = useState<SegmentationResult | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const nvRef = useRef<Niivue | null>(null);
 
   useEffect(() => {
     listCaseViewerCases()
       .then(setCases)
-      .catch((err: any) => setError(err.message || "Failed to load cases"))
+      .catch((err) => setError(messageOf(err, "Failed to load cases")))
       .finally(() => setLoading(false));
   }, []);
 
-  // chạy sau khi canvas xuất hiện (post-render) — init NiiVue + load volume
+  // Runs after the canvas is mounted: create a NiiVue instance per selected case
+  // (the canvas is a new element each time) and release its WebGL context on leave.
   useEffect(() => {
-    if (!selected || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    if (!selected || !canvas) return;
+    let cancelled = false;
+    let nv: Niivue | null = null;
+
     setLoadState("loading");
-    if (!nvRef.current) {
-      const NiivueCtor = getNiivueCtor();
-      const nv = new NiivueCtor({ dragAndDropEnabled: false });
-      // colormap + render áp khi mỗi volume load xong (timing proven ở standalone)
-      (nv as any).onVolumeLoaded = (vol: any) => {
-        if (nv.volumes && nv.volumes.length > 1) {
-          const seg = nv.volumes[nv.volumes.length - 1];
-          seg.setColormapLabel(SEG_CMAP);
-          seg.opacity = 0.9;
-        }
-        const segVol = nv.volumes && nv.volumes[1];
-        setDiag(
-          `volumes=${nv.volumes?.length} colormap=${!!segVol?.colormapLabel} opacity=${segVol?.opacity} ` +
-            `name=${segVol?.name}`
-        );
-        nv.setSliceType(view3d ? nv.sliceTypeRender : nv.sliceTypeMultiplanar);
-        nv.setRenderAzimuthElevation(45, 20);
-        nv.drawScene();
-      };
-      nv.attachToCanvas(canvasRef.current);
-      nvRef.current = nv;
-    }
-    const nv = nvRef.current;
+    setView3d(true);
+    setMaskSource("expert");
+    setPredMetrics(null);
+    setSegState("idle");
+
     (async () => {
       try {
-        const [baseBlob, segBlob] = await Promise.all([
-          getCaseViewerVolume(selected.case_id, "t1ce"),
-          getCaseViewerVolume(selected.case_id, "seg"),
-        ]);
-        await nv.loadVolumes([
-          { url: URL.createObjectURL(baseBlob), name: "t1ce.nii.gz" },
-          { url: URL.createObjectURL(segBlob), name: "seg.nii.gz" },
-        ]);
-        if (nv.volumes && nv.volumes[1]) nv.volumes[1].setColormapLabel(SEG_CMAP);
-        setView3d(true);
-        nv.setSliceType(nv.sliceTypeRender);
-        nv.setRenderAzimuthElevation(45, 20);
-        nv.drawScene();
+        const { Niivue: NiivueCtor } = await import("@niivue/niivue");
+        // Dynamic on purpose: keeps the ~2 MB WebGL library out of the main bundle until a case is opened.
+        if (cancelled) return;
+        nv = new NiivueCtor({ dragAndDropEnabled: false });
+        await nv.attachToCanvas(canvas);
+        if (cancelled) return;
+        await loadCaseVolumes(nv, selected.case_id, "expert");
+        if (cancelled) return;
+        nvRef.current = nv;
+        applyView(nv, true);
         setLoadState("done");
-      } catch (err: any) {
-        setError(err.message || "Failed to load volume");
+      } catch (err) {
+        if (cancelled) return;
+        setError(messageOf(err, "Failed to load volume"));
         setLoadState("error");
       }
     })();
+
+    return () => {
+      cancelled = true;
+      nv?.cleanup();
+      nvRef.current = null;
+    };
   }, [selected]);
 
   const toggleView = (to3d: boolean) => {
     const nv = nvRef.current;
     if (!nv) return;
     setView3d(to3d);
-    nv.setSliceType(to3d ? nv.sliceTypeRender : nv.sliceTypeMultiplanar);
-    nv.drawScene();
+    applyView(nv, to3d);
+  };
+
+  /** Swap the mask volume; ignores the result if the case was closed meanwhile. */
+  const showMask = async (nv: Niivue, caseId: string, source: MaskSource) => {
+    await loadCaseVolumes(nv, caseId, source);
+    if (nvRef.current !== nv) return false;
+    setMaskSource(source);
+    applyView(nv, view3d);
+    return true;
   };
 
   const runSegmentation = async () => {
     const nv = nvRef.current;
-    if (!nv || !selected || segState === "running") return;
+    if (!nv || !selected || segState === "running" || maskBusy) return;
     setSegState("running");
     setError("");
     try {
       const metrics = await segmentCaseViewerCase(selected.case_id);
+      if (nvRef.current !== nv) return;
       setPredMetrics(metrics);
-      const predBlob = await getCaseViewerVolume(selected.case_id, "pred");
-      const baseBlob = await getCaseViewerVolume(selected.case_id, "t1ce");
-      await nv.loadVolumes([
-        { url: URL.createObjectURL(baseBlob), name: "t1ce.nii.gz" },
-        { url: URL.createObjectURL(predBlob), name: "seg.nii" },
-      ]);
-      if (nv.volumes && nv.volumes[1]) nv.volumes[1].setColormapLabel(SEG_CMAP);
-      setMaskSource("model");
-      nv.setSliceType(view3d ? nv.sliceTypeRender : nv.sliceTypeMultiplanar);
-      nv.drawScene();
-      setSegState("done");
-    } catch (err: any) {
-      setError(err.message || "Segmentation failed");
+      if (await showMask(nv, selected.case_id, "model")) setSegState("done");
+    } catch (err) {
+      if (nvRef.current !== nv) return;
+      setError(messageOf(err, "Segmentation failed"));
       setSegState("error");
     }
   };
 
-  const switchMask = (src: "expert" | "model") => {
+  const switchMask = async (source: MaskSource) => {
     const nv = nvRef.current;
-    if (!nv || !selected || src === maskSource) return;
-    if (src === "model" && !predMetrics) {
-      runSegmentation();
+    if (!nv || !selected || source === maskSource || maskBusy || segState === "running") return;
+    if (source === "model" && !predMetrics) {
+      await runSegmentation();
       return;
     }
-    const load = async () => {
-      const [baseBlob, maskBlob] = await Promise.all([
-        getCaseViewerVolume(selected.case_id, "t1ce"),
-        getCaseViewerVolume(selected.case_id, src === "expert" ? "seg" : "pred"),
-      ]);
-      await nv.loadVolumes([
-        { url: URL.createObjectURL(baseBlob), name: "t1ce.nii.gz" },
-        { url: URL.createObjectURL(maskBlob), name: "seg.nii" },
-      ]);
-      if (nv.volumes && nv.volumes[1]) nv.volumes[1].setColormapLabel(SEG_CMAP);
-      setMaskSource(src);
-      nv.setSliceType(view3d ? nv.sliceTypeRender : nv.sliceTypeMultiplanar);
-      nv.drawScene();
-    };
-    load().catch((err: any) => setError(err.message || "Failed to switch mask"));
+    setMaskBusy(true);
+    setError("");
+    try {
+      await showMask(nv, selected.case_id, source);
+    } catch (err) {
+      if (nvRef.current === nv) setError(messageOf(err, "Failed to switch mask"));
+    } finally {
+      setMaskBusy(false);
+    }
   };
 
-  const metrics = maskSource === "model" && predMetrics ? predMetrics.volumes_cm3 : null;
-
-  const pct = (part: number, total: number) =>
-    total > 0 ? ((part / total) * 100).toFixed(1) : "0.0";
+  const volumes =
+    selected && maskSource === "model" && predMetrics
+      ? predMetrics.volumes_cm3
+      : selected?.volumes_cm3;
 
   return (
     <div className="page-container" style={{ maxWidth: "1400px" }}>
@@ -171,7 +184,7 @@ export function CaseViewer() {
         <Brain size={24} style={{ color: "var(--accent)" }} /> Case Viewer — 3D Tumor Analysis
       </h1>
       <p className="text-muted" style={{ marginBottom: "1.5rem" }}>
-        BraTS 2021 sample volumes · multi-region masks (ET · ED · NCR) · real volume in cm³ · kéo chuột để xoay 3D
+        BraTS 2021 sample volumes · multi-region masks (ET · ED · NCR) · real volume in cm³ · drag to rotate in 3D
       </p>
 
       {error && (
@@ -207,7 +220,7 @@ export function CaseViewer() {
         </div>
       )}
 
-      {selected && (
+      {selected && volumes && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "1.25rem", alignItems: "start" }}>
           <div className="card" style={{ padding: "1rem", background: "#fff" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
@@ -226,20 +239,17 @@ export function CaseViewer() {
               {loadState === "loading" && (
                 <div className="loading-screen" style={{ position: "absolute", inset: 0, background: "rgba(15,17,21,0.7)" }}>
                   <div className="spinner" />
-                  <p style={{ color: "#94a3b8", fontSize: "0.85rem" }}>Đang tải volume…</p>
+                  <p style={{ color: "#94a3b8", fontSize: "0.85rem" }}>Loading volume…</p>
                 </div>
               )}
               {loadState === "error" && (
                 <div className="loading-screen" style={{ position: "absolute", inset: 0, background: "rgba(15,17,21,0.7)" }}>
-                  <p style={{ color: "#f87171", fontSize: "0.85rem" }}>Không tải được volume</p>
+                  <p style={{ color: "#f87171", fontSize: "0.85rem" }}>Could not load volume</p>
                 </div>
               )}
             </div>
             <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: "0.5rem", display: "flex", gap: "0.4rem", alignItems: "center" }}>
-              <Boxes size={14} /> chuột trái kéo = xoay · scroll = zoom · chuột phải kéo = pan
-              {diag && (
-                <code style={{ marginLeft: "auto", color: "#64748b", fontSize: "0.7rem" }}>{diag}</code>
-              )}
+              <Boxes size={14} /> left drag = rotate · scroll = zoom · right drag = pan
             </p>
           </div>
 
@@ -250,12 +260,14 @@ export function CaseViewer() {
                 <button
                   className={`btn btn-tiny ${maskSource === "expert" ? "active" : ""}`}
                   onClick={() => switchMask("expert")}
+                  disabled={maskBusy || segState === "running"}
                 >
                   Expert
                 </button>
                 <button
                   className={`btn btn-tiny ${maskSource === "model" ? "active" : ""}`}
                   onClick={() => switchMask("model")}
+                  disabled={maskBusy || segState === "running"}
                 >
                   Model
                 </button>
@@ -265,35 +277,28 @@ export function CaseViewer() {
               <div key={key} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
                 <span style={{ width: 12, height: 12, borderRadius: 3, background: color }} />
                 <span style={{ flex: 1 }}>{label}</span>
-                <strong>{(metrics ? metrics[key] : selected.volumes_cm3[key]).toFixed(1)} cm³</strong>
+                <strong>{volumes[key].toFixed(1)} cm³</strong>
                 <span className="text-muted" style={{ width: "3rem", textAlign: "right" }}>
-                  {pct(metrics ? metrics[key] : selected.volumes_cm3[key], metrics ? metrics.total : selected.volumes_cm3.total)}%
+                  {pct(volumes[key], volumes.total)}%
                 </span>
               </div>
             ))}
             <div style={{ borderTop: "1px solid rgba(45,49,66,0.12)", paddingTop: "0.75rem", display: "flex", justifyContent: "space-between" }}>
               <span>Total</span>
-              <strong style={{ color: "var(--accent)" }}>
-                {(metrics ? metrics.total : selected.volumes_cm3.total).toFixed(1)} cm³
-              </strong>
+              <strong style={{ color: "var(--accent)" }}>{volumes.total.toFixed(1)} cm³</strong>
             </div>
 
             {maskSource === "expert" ? (
-              <button className="btn btn-primary btn-block" style={{ marginTop: "1rem" }} onClick={runSegmentation} disabled={segState === "running"}>
-                <Wand2 size={16} /> {segState === "running" ? "Đang phân đoạn… ≈2 phút" : "Phân đoạn 3D · SwinUNETR"}
+              <button className="btn btn-primary btn-block" style={{ marginTop: "1rem" }} onClick={runSegmentation} disabled={segState === "running" || maskBusy}>
+                <Wand2 size={16} /> {segState === "running" ? "Segmenting… ≈2 min" : "3D segmentation · SwinUNETR"}
               </button>
             ) : (
               <div className="text-muted" style={{ marginTop: "0.75rem", fontSize: "0.8rem" }}>
-                Mask từ model SwinUNETR · {predMetrics ? `${predMetrics.seconds}s GPU` : ""}
-              </div>
-            )}
-            {segState === "error" && maskSource === "expert" && (
-              <div className="text-muted" style={{ marginTop: "0.5rem", fontSize: "0.8rem", color: "#ef4444" }}>
-                Phân đoạn thất bại — xem console
+                Mask from the SwinUNETR model{predMetrics ? ` · ${predMetrics.seconds}s GPU` : ""}
               </div>
             )}
             <div className="text-muted" style={{ marginTop: "0.75rem", fontSize: "0.8rem", display: "flex", gap: "0.4rem", alignItems: "center" }}>
-              <Layers size={14} /> {maskSource === "expert" ? "mask expert seg" : "mask dự đoán (inference ~2 phút, lưu cache)"}
+              <Layers size={14} /> {maskSource === "expert" ? "expert segmentation mask" : "predicted mask (inference ~2 min, cached)"}
             </div>
           </div>
         </div>

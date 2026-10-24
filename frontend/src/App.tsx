@@ -7,6 +7,7 @@ import { OAuthCallback } from "./components/OAuthCallback";
 import { DashboardLayout } from "./components/DashboardLayout";
 import { DashboardHome } from "./components/DashboardHome";
 import { Detector } from "./components/Detector";
+import { CaseViewer } from "./components/CaseViewer";
 import { History } from "./components/History";
 import { Settings } from "./components/Settings";
 
@@ -58,6 +59,7 @@ function App() {
         <Route index element={<DashboardHome />} />
         <Route path="detector" element={<Detector />} />
         <Route path="history" element={<History />} />
+        <Route path="case-viewer" element={<CaseViewer />} />
         <Route path="settings" element={<Settings />} />
       </Route>
 

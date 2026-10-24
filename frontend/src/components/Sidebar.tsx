@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -9,23 +9,23 @@ import {
   Brain,
   ChevronLeft,
   Menu,
-  HelpCircle,
-  Activity,
+  Boxes,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 export function Sidebar() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
-  const items: { to: string; end?: boolean; label: string; icon: React.ReactNode }[] = [
+  const items: { to: string; end?: boolean; label: string; icon: ReactNode }[] = [
     { to: "/", end: true, label: "Dashboard", icon: <LayoutDashboard size={19} /> },
     { to: "/detector", label: "Detector", icon: <Scan size={19} /> },
     { to: "/history", label: "History", icon: <Clock size={19} /> },
+    { to: "/case-viewer", label: "Case Viewer", icon: <Boxes size={19} /> },
     { to: "/settings", label: "Settings", icon: <Settings size={19} /> },
   ];
 
-  const initials = "D"; // Dr. Smith
+  const initials = (user?.username?.[0] ?? "?").toUpperCase();
 
   return (
     <aside className={`sidebar${collapsed ? " collapsed" : ""}`}>
@@ -61,8 +61,8 @@ export function Sidebar() {
             {initials}
           </div>
           <div className="sidebar-user-info">
-            <span className="sidebar-user-name">Dr. Smith</span>
-            <span className="sidebar-user-role">Lead Radiologist</span>
+            <span className="sidebar-user-name">{user?.username ?? "…"}</span>
+            <span className="sidebar-user-role">{user?.email ?? ""}</span>
           </div>
         </div>
       )}
@@ -84,12 +84,6 @@ export function Sidebar() {
 
       {/* Footer section */}
       <div className="sidebar-footer">
-        {!collapsed && (
-          <button className="sidebar-item" onClick={() => window.open("#", "_self")}>
-            <HelpCircle size={19} />
-            <span>Help Center</span>
-          </button>
-        )}
         <button className="sidebar-item logout" onClick={logout}>
           <LogOut size={19} />
           {!collapsed && <span>Sign Out</span>}
@@ -102,12 +96,6 @@ export function Sidebar() {
           <div className="status-footer-left">
             <span className="status-dot" />
             <span>System Online</span>
-          </div>
-          <div className="status-footer-right">
-            <span className="neural-badge">
-              <Activity size={10} />
-              Neural v2.4
-            </span>
           </div>
         </div>
       )}

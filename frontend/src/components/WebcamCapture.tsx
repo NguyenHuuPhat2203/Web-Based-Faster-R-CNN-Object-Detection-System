@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Camera, CameraOff, AlertCircle, RotateCcw } from "lucide-react";
-import { predict, type PredictionResult, type ModelType } from "../lib/api";
+import { messageOf, predict, type PredictionResult, type ModelType } from "../lib/api";
+import { drawDetections } from "../lib/drawScan";
 
 /* ---------- Types ---------- */
 
@@ -19,10 +20,19 @@ export function WebcamCapture({ model, threshold, onResult, onError }: WebcamCap
   const [state, setState] = useState<WebcamState>("init");
   const [capturing, setCapturing] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  // Last analysed frame; boxes are in that frame's pixel space.
+  const [shot, setShot] = useState<{ result: PredictionResult; width: number; height: number } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasOverlayRef = useRef<HTMLCanvasElement | null>(null);
-  const animFrameRef = useRef<number>(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   /* ── Start camera ─────────────────────────────────────────────── */
 
@@ -33,10 +43,16 @@ export function WebcamCapture({ model, threshold, onResult, onError }: WebcamCap
         video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       });
+      if (!mountedRef.current) {
+        s.getTracks().forEach((t) => t.stop()); // unmounted while the permission prompt was open
+        return;
+      }
       setStream(s);
       setState("active");
-    } catch (err: any) {
-      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+    } catch (err) {
+      if (!mountedRef.current) return;
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
         setState("denied");
       } else {
         setState("error");
@@ -51,7 +67,7 @@ export function WebcamCapture({ model, threshold, onResult, onError }: WebcamCap
       stream.getTracks().forEach((t) => t.stop());
       setStream(null);
     }
-    cancelAnimationFrame(animFrameRef.current);
+    setShot(null);
     setState("init");
   }, [stream]);
 
@@ -59,7 +75,6 @@ export function WebcamCapture({ model, threshold, onResult, onError }: WebcamCap
   useEffect(() => {
     return () => {
       if (stream) stream.getTracks().forEach((t) => t.stop());
-      cancelAnimationFrame(animFrameRef.current);
     };
   }, [stream]);
 
@@ -67,7 +82,7 @@ export function WebcamCapture({ model, threshold, onResult, onError }: WebcamCap
 
   const captureAndPredict = useCallback(async () => {
     const video = videoRef.current;
-    if (!video || capturing) return;
+    if (!video || !video.videoWidth || capturing) return;
 
     setCapturing(true);
     try {
@@ -87,44 +102,26 @@ export function WebcamCapture({ model, threshold, onResult, onError }: WebcamCap
       const file = new File([blob], `webcam-${Date.now()}.jpg`, { type: "image/jpeg" });
       const result = await predict(file, threshold, model, { explain: false });
 
-      // Draw overlay
-      const overlay = canvasOverlayRef.current;
-      if (overlay) {
-        overlay.width = video.videoWidth;
-        overlay.height = video.videoHeight;
-        const ctx = overlay.getContext("2d");
-        if (ctx) {
-          ctx.clearRect(0, 0, overlay.width, overlay.height);
-          ctx.lineWidth = 3;
-          ctx.font = "bold 16px Inter, system-ui, sans-serif";
-
-          result.boxes.forEach((box, i) => {
-            const [xmin, ymin, xmax, ymax] = box;
-            const score = result.scores[i];
-            const label = result.label_names?.[i] || `Class ${result.labels[i]}`;
-
-            ctx.strokeStyle = "#10b981";
-            ctx.strokeRect(xmin, ymin, xmax - xmin, ymax - ymin);
-
-            const labelText = `${label}: ${(score * 100).toFixed(1)}%`;
-            const textWidth = ctx.measureText(labelText).width;
-
-            ctx.fillStyle = "#10b981";
-            ctx.fillRect(xmin, ymin - 28, textWidth + 10, 28);
-
-            ctx.fillStyle = "white";
-            ctx.fillText(labelText, xmin + 5, ymin - 7);
-          });
-        }
-      }
-
+      if (!mountedRef.current) return;
+      setShot({ result, width: video.videoWidth, height: video.videoHeight });
       onResult(result);
-    } catch (err: any) {
-      onError(err.message || "Detection failed");
+    } catch (err) {
+      if (mountedRef.current) onError(messageOf(err, "Detection failed"));
     } finally {
-      setCapturing(false);
+      if (mountedRef.current) setCapturing(false);
     }
   }, [capturing, threshold, model, onResult, onError]);
+
+  /* ── Overlay: redraw on capture and whenever the confidence slider moves ── */
+
+  useEffect(() => {
+    const overlay = canvasOverlayRef.current;
+    const ctx = overlay?.getContext("2d");
+    if (!overlay || !ctx || !shot) return;
+    overlay.width = shot.width; // also clears the previous drawing
+    overlay.height = shot.height;
+    drawDetections(ctx, { ...shot.result, threshold });
+  }, [shot, threshold, state]);
 
   /* ── Attach stream to video element ────────────────────────────── */
 

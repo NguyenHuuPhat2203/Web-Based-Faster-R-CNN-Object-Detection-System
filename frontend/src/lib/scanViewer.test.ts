@@ -46,7 +46,6 @@ describe("measureClick", () => {
 
 describe("clearMeasurements", () => {
   it("resets the list and the start point", () => {
-    const withStart = measureClick(empty, { x: 5, y: 5 });
-    expect(clearMeasurements(withStart)).toEqual(empty);
+    expect(clearMeasurements()).toEqual(empty);
   });
 });

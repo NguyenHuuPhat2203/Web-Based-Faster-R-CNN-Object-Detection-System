@@ -67,12 +67,19 @@ describe("drawScan", () => {
     expect(calls.filter((c) => c.startsWith("strokeRect")).length).toBe(1);
   });
 
-  it("draws the label bar above the box with fixed geometry", () => {
+  it("draws the label bar above the box when there is room", () => {
     const { ctx, calls } = fakeCtx();
-    drawScan(ctx, img, overlays());
-    // label bar: fillRect(xmin, ymin-34, textWidth+14, 34)
+    drawScan(ctx, img, overlays({ boxes: [[10, 40, 60, 80]], scores: [0.9] }));
+    // bar: fillRect(xmin, ymin - barHeight, textWidth + 2 * pad, barHeight)
     const bar = calls.find((c) => c.startsWith("fillRect:"));
-    expect(bar).toBe("fillRect:10:-14:126:34"); // textWidth=112 (14 chars x 8px) + 14
+    expect(bar).toBe("fillRect:10:14:124:26"); // textWidth=112 (14 chars x 8px) + 12
+  });
+
+  it("keeps the label bar on the canvas when the box touches the top edge", () => {
+    const { ctx, calls } = fakeCtx();
+    drawScan(ctx, img, overlays({ boxes: [[10, 5, 60, 40]], scores: [0.9] }));
+    const bar = calls.find((c) => c.startsWith("fillRect:"));
+    expect(bar).toBe("fillRect:10:5:124:26");
   });
 
   it("draws dashed measurement lines with px labels", () => {
