@@ -2,25 +2,56 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, field_validator
+from pydantic import AfterValidator, BaseModel
+
+from ..core.security import BCRYPT_MAX_PASSWORD_BYTES
+
+MIN_PASSWORD_LENGTH = 6
+MAX_EMAIL_LENGTH = 255
+MAX_USERNAME_LENGTH = 100
+_EMAIL_PATTERN = re.compile(r"[^@\s]+@[^@\s]+")
+
+
+def _normalize_email(value: str) -> str:
+    """Trim, lowercase, and sanity-check an email address."""
+    email = value.strip().lower()
+    if len(email) > MAX_EMAIL_LENGTH or not _EMAIL_PATTERN.fullmatch(email):
+        raise ValueError("Invalid email")
+    return email
+
+
+def _normalize_username(value: str) -> str:
+    """Trim a username and enforce the column length."""
+    username = value.strip()
+    if not username or len(username) > MAX_USERNAME_LENGTH:
+        raise ValueError(f"Username must be 1-{MAX_USERNAME_LENGTH} characters")
+    return username
+
+
+def _check_password_strength(value: str) -> str:
+    """Enforce minimum length and the bcrypt 72-byte ceiling."""
+    if len(value) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
+    if len(value.encode()) > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError(f"Password must be at most {BCRYPT_MAX_PASSWORD_BYTES} bytes")
+    return value
+
+
+Email = Annotated[str, AfterValidator(_normalize_email)]
+Username = Annotated[str, AfterValidator(_normalize_username)]
+NewPassword = Annotated[str, AfterValidator(_check_password_strength)]
 
 
 class RegisterRequest(BaseModel):
     """Payload for local user registration."""
 
-    email: str
-    username: str
-    password: str
-
-    @field_validator("password")
-    @classmethod
-    def password_strength(cls, value: str) -> str:
-        """Validate password length."""
-        if len(value) < 6:
-            raise ValueError("Password must be at least 6 characters")
-        return value
+    email: Email
+    username: Username
+    password: NewPassword
 
 
 class LoginRequest(BaseModel):
@@ -72,31 +103,15 @@ class UserWithTokens(UserOut):
 class ProfileUpdateRequest(BaseModel):
     """Payload for profile updates."""
 
-    username: str | None = None
-    email: str | None = None
-
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, value: str | None) -> str | None:
-        """Validate email format when provided."""
-        if value is not None and "@" not in value:
-            raise ValueError("Invalid email")
-        return value
+    username: Username | None = None
+    email: Email | None = None
 
 
 class PasswordChangeRequest(BaseModel):
     """Payload for password change."""
 
     current_password: str
-    new_password: str
-
-    @field_validator("new_password")
-    @classmethod
-    def password_strength(cls, value: str) -> str:
-        """Validate new password length."""
-        if len(value) < 6:
-            raise ValueError("Password must be at least 6 characters")
-        return value
+    new_password: NewPassword
 
 
 class UserStats(BaseModel):

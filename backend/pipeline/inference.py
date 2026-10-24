@@ -9,10 +9,11 @@ from dataclasses import dataclass
 import structlog
 import torch
 from PIL import Image as PILImage
+from PIL import ImageOps
 
-from ml.backbone.faster_rcnn import get_device
 from ml.core.entities import InferenceResult
 from ml.core.postprocess import filter_above_floor, tensors_to_inference_result
+from ml.models.faster_rcnn import get_device
 
 from .memory import free_gpu_memory, is_oom
 from .timing import stage_timer
@@ -61,7 +62,9 @@ class InferenceEngine:
     ) -> InferenceResult:
         """Run inference over image bytes; returns an InferenceResult."""
         with stage_timer("decode", model_version=self.adapter.model_version):
-            image = PILImage.open(io.BytesIO(contents)).convert("RGB")
+            # Browsers render JPEGs EXIF-rotated; boxes must use the same frame.
+            with PILImage.open(io.BytesIO(contents)) as raw:
+                image = ImageOps.exif_transpose(raw).convert("RGB")
 
         detections, used_cpu = self._forward_with_fallback(image)
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Scan,
   AlertCircle,
@@ -6,32 +6,21 @@ import {
   CalendarDays,
   ArrowRight,
   Image as ImageIcon,
-  Activity,
   CheckCircle,
-  Clock,
 } from "lucide-react";
 import { useNavigate, useOutletContext } from "react-router-dom";
-import { authFetch } from "../lib/session";
 import {
+  messageOf,
   fetchUserStats,
   listImages,
-  getImageUrl,
-  detectionsToPredictionResult,
+  confirmedDetections,
+  imageToPredictionResult,
   type UserStats,
   type ImageInfo,
-  type PredictionResult,
 } from "../lib/api";
+import { isTumor } from "../lib/detections";
+import { useImageBlobUrls } from "../lib/useImageBlobUrls";
 import type { LayoutOutletContext } from "./DashboardLayout";
-
-/* ─── Chart data ─── */
-const MONTHLY_ACCURACY = [
-  { month: "Jan", value: 97.5 },
-  { month: "Feb", value: 97.8 },
-  { month: "Mar", value: 98.2 },
-  { month: "Apr", value: 99.4 },
-  { month: "May", value: 99.1 },
-  { month: "Jun", value: 99.2 },
-];
 
 export function DashboardHome() {
   const navigate = useNavigate();
@@ -40,49 +29,29 @@ export function DashboardHome() {
   const [recentImages, setRecentImages] = useState<ImageInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError("");
     Promise.all([fetchUserStats(), listImages()])
       .then(([s, imgs]) => {
         setStats(s);
         setRecentImages(imgs.slice(0, 5));
       })
-      .catch((err) => setError(err.message || "Failed to load dashboard"))
+      .catch((err) => setError(messageOf(err, "Failed to load dashboard")))
       .finally(() => setLoading(false));
   }, []);
 
-  // Fetch thumbnails via authFetch
-  useEffect(() => {
-    if (recentImages.length === 0) return;
-    for (const img of recentImages) {
-      if (thumbnails[img.id]) continue;
-      authFetch(`/images/${img.id}`)
-        .then((r) => (r.ok ? r.blob() : null))
-        .then((blob) => {
-          if (blob) {
-            const url = URL.createObjectURL(blob);
-            setThumbnails((prev) => ({ ...prev, [img.id]: url }));
-          }
-        })
-        .catch(() => {});
-    }
-  }, [recentImages]);
+  useEffect(load, [load]);
 
-  const getStatusBadge = (img: ImageInfo) => {
-    if (img.detections.length > 0) {
-      const hasTumor = img.detections.some((d: any) => d.confidence >= 0.3);
-      if (hasTumor) {
-        return <span className="status-badge detection"><AlertCircle size={10} /> Detection</span>;
-      }
-      return <span className="status-badge completed"><CheckCircle size={10} /> Completed</span>;
-    }
-    return <span className="status-badge processing"><Clock size={10} /> Processing</span>;
-  };
+  const thumbnails = useImageBlobUrls(recentImages.map((img) => img.id));
 
-  const chartHeight = 120;
-  const maxVal = Math.max(...MONTHLY_ACCURACY.map(d => d.value));
-  const minVal = 95;
+  const getStatusBadge = (img: ImageInfo) =>
+    confirmedDetections(img).some((d) => isTumor(d.label_name)) ? (
+      <span className="status-badge detection"><AlertCircle size={10} /> Detection</span>
+    ) : (
+      <span className="status-badge completed"><CheckCircle size={10} /> Completed</span>
+    );
 
   if (loading) {
     return (
@@ -98,7 +67,7 @@ export function DashboardHome() {
         <div className="error-state">
           <AlertCircle size={24} />
           <p>{error}</p>
-          <button className="btn btn-secondary" onClick={() => window.location.reload()}>
+          <button className="btn btn-secondary" onClick={load}>
             Retry
           </button>
         </div>
@@ -135,8 +104,8 @@ export function DashboardHome() {
         </div>
       </div>
 
-      {/* Quick Actions + Chart row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "2rem" }}>
+      {/* Quick Actions */}
+      <div style={{ marginBottom: "2rem" }}>
         {/* Quick Actions */}
         <div className="section" style={{ marginBottom: 0 }}>
           <h2 className="section-title">Quick Actions</h2>
@@ -149,41 +118,6 @@ export function DashboardHome() {
               </p>
               <ArrowRight size={16} />
             </button>
-          </div>
-        </div>
-
-        {/* Accuracy Chart */}
-        <div className="chart-card">
-          <div className="chart-header">
-            <div>
-              <div className="chart-title">Analysis Accuracy</div>
-              <div className="chart-subtitle">Monthly %</div>
-            </div>
-            <div className="chart-legend">
-              <span className="chart-legend-dot" />
-              AI Model v4.2 — 99.2% Accuracy
-            </div>
-          </div>
-          <div className="chart-bars">
-            {MONTHLY_ACCURACY.map((d) => {
-              const pct = ((d.value - minVal) / (maxVal - minVal)) * 90 + 10;
-              const isHighest = d.value >= 99.4;
-              return (
-                <div key={d.month} className="chart-bar-group">
-                  <div
-                    className="chart-bar"
-                    style={{
-                      height: `${pct}%`,
-                      background: isHighest
-                        ? "linear-gradient(to top, var(--primary), #22d3ee)"
-                        : "linear-gradient(to top, rgba(6, 182, 212, 0.4), rgba(6, 182, 212, 0.15))",
-                    }}
-                  />
-                  <span className="chart-bar-value">{d.value}%</span>
-                  <span className="chart-bar-label">{d.month}</span>
-                </div>
-              );
-            })}
           </div>
         </div>
       </div>
@@ -207,14 +141,14 @@ export function DashboardHome() {
               <button
                 key={img.id}
                 className="recent-item"
-                onClick={() => onViewImage(img.id, img.detections.length > 0 ? detectionsToPredictionResult(img.detections) : null)}
+                onClick={() => onViewImage(img.id, imageToPredictionResult(img))}
                 style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}
               >
-                <img
-                  src={thumbnails[img.id] || getImageUrl(img.id)}
-                  alt={img.original_name}
-                  className="recent-thumb"
-                />
+                {thumbnails[img.id] ? (
+                  <img src={thumbnails[img.id]} alt={img.original_name} className="recent-thumb" />
+                ) : (
+                  <div className="recent-thumb" />
+                )}
                 <div className="recent-info" style={{ flex: 1 }}>
                   <span className="recent-name">{img.original_name}</span>
                   <span className="recent-date">

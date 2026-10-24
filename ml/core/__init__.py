@@ -2,9 +2,9 @@
 
 from ml.core.constants import (
     DEFAULT_SCORE_THRESHOLD,
-    FRCNN_CLASS_NAMES,
-    FRCNN_MODEL_VERSION,
-    FRCNN_NUM_CLASSES,
+    FASTER_RCNN_CLASS_NAMES,
+    FASTER_RCNN_MODEL_VERSION,
+    FASTER_RCNN_NUM_CLASSES,
     YOLO_MODEL_VERSION,
 )
 from ml.core.entities import Detection, InferenceResult, Scan
@@ -15,9 +15,9 @@ from ml.core.postprocess import (
 
 __all__ = [
     "DEFAULT_SCORE_THRESHOLD",
-    "FRCNN_CLASS_NAMES",
-    "FRCNN_MODEL_VERSION",
-    "FRCNN_NUM_CLASSES",
+    "FASTER_RCNN_CLASS_NAMES",
+    "FASTER_RCNN_MODEL_VERSION",
+    "FASTER_RCNN_NUM_CLASSES",
     "YOLO_MODEL_VERSION",
     "Detection",
     "InferenceResult",

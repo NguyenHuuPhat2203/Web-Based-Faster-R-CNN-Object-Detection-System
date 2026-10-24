@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
         default=_PROJECT_ROOT / "training" / "outputs" / "yolo",
     )
     parser.add_argument("--name", type=str, default="tumor")
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args(argv)
 
     from ultralytics import YOLO
@@ -40,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         batch=args.batch,
         project=str(args.project),
         name=args.name,
+        seed=args.seed,
     )
     return 0
 

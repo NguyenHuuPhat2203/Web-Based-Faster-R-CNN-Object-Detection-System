@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import { Outlet, useSearchParams } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { ImageViewer } from "./ImageViewer";
@@ -15,8 +15,9 @@ export function DashboardLayout() {
     Record<number, PredictionResult | null>
   >({});
 
-  const viewParam = searchParams.get("view");
-  const viewId = viewParam ? Number(viewParam) : null;
+  // Ignore malformed ?view= values instead of mounting a viewer for NaN.
+  const viewParam = Number(searchParams.get("view"));
+  const viewId = Number.isInteger(viewParam) && viewParam > 0 ? viewParam : null;
 
   const handleViewImage = useCallback(
     (imageId: number, results: PredictionResult | null) => {

@@ -1,11 +1,11 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { UserPlus, Mail, Lock, User, AlertCircle, ShieldCheck, Activity } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { messageOf } from "../lib/api";
 
 export function Register() {
-  const { register } = useAuth();
-  const navigate = useNavigate();
+  const { register, isAuth } = useAuth();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -25,13 +25,14 @@ export function Register() {
     setSubmitting(true);
     try {
       await register(email, username, password);
-      navigate("/", { replace: true });
-    } catch (err: any) {
-      setError(err.message || "Registration failed");
+    } catch (err) {
+      setError(messageOf(err, "Registration failed"));
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (isAuth) return <Navigate to="/" replace />;
 
   return (
     <div className="auth-container">
@@ -121,7 +122,7 @@ export function Register() {
           </span>
           <span className="login-status-item">
             <ShieldCheck size={12} />
-            Secure AES-256
+            Secure session
           </span>
         </div>
       </div>

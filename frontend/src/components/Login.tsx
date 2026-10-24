@@ -1,12 +1,11 @@
 import React, { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { LogIn, Mail, Lock, AlertCircle, ShieldCheck, Activity } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { getGoogleAuthUrl } from "../lib/api";
+import { messageOf, startGoogleLogin } from "../lib/api";
 
 export function Login() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  const { login, isAuth } = useAuth();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from || "/";
   const [email, setEmail] = useState("");
@@ -20,22 +19,19 @@ export function Login() {
     setSubmitting(true);
     try {
       await login(email, password);
-      navigate(from, { replace: true });
-    } catch (err: any) {
-      setError(err.message || "Login failed");
+    } catch (err) {
+      setError(messageOf(err, "Login failed"));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleGoogle = () => {
-    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:8000"}/auth/google`)
-      .then((r) => r.json())
-      .then((data) => {
-        window.location.href = data.redirect_url;
-      })
-      .catch(() => setError("Failed to initiate Google login"));
+    setError("");
+    startGoogleLogin().catch((err) => setError(messageOf(err, "Failed to initiate Google login")));
   };
+
+  if (isAuth) return <Navigate to={from} replace />;
 
   return (
     <div className="auth-container">
@@ -90,7 +86,7 @@ export function Login() {
           <span>or continue with</span>
         </div>
 
-        <button className="btn btn-google" onClick={handleGoogle}>
+        <button type="button" className="btn btn-google" onClick={handleGoogle}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path
               d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
@@ -127,7 +123,7 @@ export function Login() {
           </span>
           <span className="login-status-item">
             <ShieldCheck size={12} />
-            Secure AES-256
+            Secure session
           </span>
         </div>
       </div>

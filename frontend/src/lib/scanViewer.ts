@@ -54,6 +54,6 @@ export function measureClick(
   };
 }
 
-export function clearMeasurements(state: MeasureState): MeasureState {
+export function clearMeasurements(): MeasureState {
   return { start: null, list: [] };
 }

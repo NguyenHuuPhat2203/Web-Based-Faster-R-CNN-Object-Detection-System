@@ -9,9 +9,15 @@ import pytest
     "module_name",
     [
         "training.scripts.download_dataset",
-        "training.scripts.subsample_dataset",
+        "training.scripts.evaluate",
+        "training.scripts.export_safetensors",
         "training.scripts.promote_checkpoint",
+        "training.scripts.promote_from_hf",
+        "training.scripts.promote_yolo",
         "training.scripts.run_e2e_smoke",
+        "training.scripts.subsample_dataset",
+        "training.scripts.train_faster_rcnn",
+        "training.scripts.train_yolo",
         "training.scripts.verify_dataset",
     ],
 )
@@ -23,6 +29,13 @@ def test_training_script_help(module_name: str) -> None:
     with pytest.raises(SystemExit) as exc_info:
         module.main(["--help"])
     assert exc_info.value.code == 0
+
+
+def test_e2e_smoke_rejects_conflicting_model_flags() -> None:
+    """``--faster-rcnn-only`` and ``--yolo-only`` are mutually exclusive."""
+    from training.scripts.run_e2e_smoke import main
+
+    assert main(["--faster-rcnn-only", "--yolo-only"]) == 2
 
 
 def test_promote_checkpoint_refuses_v1_without_flag() -> None:
@@ -70,6 +83,8 @@ def test_promote_from_hf_refuses_v1_without_flag(tmp_path) -> None:
             "--checkpoint-dir",
             str(tmp_path),
             "--skip-download",
+            "--revision",
+            "abc123",
             "--version",
             "v1.0.0",
         ]

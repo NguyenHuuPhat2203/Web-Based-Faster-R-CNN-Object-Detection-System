@@ -1,5 +1,5 @@
 {
-  "model_type": "faster-rcnn",
+  "model_type": "faster_rcnn",
   "version": "v1.0.0",
   "dataset_version": "v1",
   "dataset_hash": "",
@@ -10,5 +10,6 @@
   "git_commit": "fa2db6bdd38e7051873105713c59747154d6d105",
   "created_at": "2026-08-08T09:09:12.471128+00:00",
   "weights": "model.safetensors",
+  "weights_sha256": "f8ddc16adec91b458e747167d23f0f39bf53b4d7e4855e80ae9f45644f313750",
   "source_checkpoint": "checkpoints\\model.pth"
 }

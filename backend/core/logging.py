@@ -20,10 +20,10 @@ def configure_structlog(*, json_logs: bool = True) -> None:
         structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
     ]
 
     if json_logs:
+        shared_processors.append(structlog.processors.format_exc_info)
         renderer: structlog.types.Processor = structlog.processors.JSONRenderer()
     else:
         renderer = structlog.dev.ConsoleRenderer()
@@ -38,7 +38,10 @@ def configure_structlog(*, json_logs: bool = True) -> None:
         cache_logger_on_first_use=True,
     )
 
+    # foreign_pre_chain gives uvicorn/SQLAlchemy stdlib records the same level,
+    # timestamp, and correlation_id fields as native structlog events.
     formatter = structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=shared_processors,
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
             renderer,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Orchestrate local E2E smoke: download -> subsample -> 1-epoch FRCNN + YOLO.
+"""Orchestrate local E2E smoke: download -> subsample -> 1-epoch Faster R-CNN + YOLO.
 
 Does not promote to registry/v1.0.0. Outputs land under training/outputs/e2e_smoke/.
 """
@@ -10,23 +10,27 @@ import argparse
 import sys
 from pathlib import Path
 
+from training.scripts.download_dataset import download_and_normalize, is_valid_layout
+from training.scripts.subsample_dataset import subsample_dataset
+from training.scripts.verify_dataset import write_checksum
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-from training.scripts.download_dataset import _is_valid_layout, download_and_normalize
-from training.scripts.subsample_dataset import subsample_dataset
-from training.scripts.verify_dataset import hash_directory
 
-
-def _run_frcnn_smoke(*, smoke_root: Path, output_dir: Path, epochs: int) -> Path:
+def _run_faster_rcnn_smoke(*, smoke_root: Path, output_dir: Path, epochs: int) -> Path:
     """Train Faster R-CNN for a few epochs on the smoke set."""
-    from training.scripts.train_faster_rcnn import main as train_frcnn_main
+    from training.scripts.train_faster_rcnn import main as train_faster_rcnn_main
 
-    code = train_frcnn_main(
+    code = train_faster_rcnn_main(
         [
             "--images",
             str(smoke_root / "train" / "images"),
             "--labels",
             str(smoke_root / "train" / "labels"),
+            "--val-images",
+            str(smoke_root / "valid" / "images"),
+            "--val-labels",
+            str(smoke_root / "valid" / "labels"),
             "--epochs",
             str(epochs),
             "--batch-size",
@@ -36,9 +40,8 @@ def _run_frcnn_smoke(*, smoke_root: Path, output_dir: Path, epochs: int) -> Path
         ]
     )
     if code != 0:
-        raise RuntimeError(f"FRCNN train failed with code {code}")
-    best = output_dir / "best_model.pth"
-    return best
+        raise RuntimeError(f"Faster R-CNN train failed with code {code}")
+    return output_dir / "best_model.pth"
 
 
 def _run_yolo_smoke(*, smoke_root: Path, output_dir: Path, epochs: int) -> None:
@@ -63,8 +66,8 @@ def _run_yolo_smoke(*, smoke_root: Path, output_dir: Path, epochs: int) -> None:
         raise RuntimeError(f"YOLO train failed with code {code}")
 
 
-def _run_frcnn_eval(*, checkpoint: Path, smoke_root: Path) -> None:
-    """Best-effort FRCNN evaluate on smoke val."""
+def _run_faster_rcnn_eval(*, checkpoint: Path, smoke_root: Path) -> None:
+    """Best-effort Faster R-CNN evaluate on smoke val."""
     from training.scripts.evaluate import main as evaluate_main
 
     code = evaluate_main(
@@ -80,7 +83,7 @@ def _run_frcnn_eval(*, checkpoint: Path, smoke_root: Path) -> None:
         ]
     )
     if code != 0:
-        print(f"FRCNN evaluate returned {code} (continuing)")
+        print(f"Faster R-CNN evaluate returned {code} (continuing)")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -110,18 +113,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Require existing data/raw/v1 instead of downloading",
     )
-    parser.add_argument("--frcnn-only", action="store_true")
+    parser.add_argument("--faster-rcnn-only", action="store_true")
     parser.add_argument("--yolo-only", action="store_true")
     parser.add_argument("--skip-eval", action="store_true")
     args = parser.parse_args(argv)
 
-    if args.frcnn_only and args.yolo_only:
-        print("Choose at most one of --frcnn-only / --yolo-only", file=sys.stderr)
+    if args.faster_rcnn_only and args.yolo_only:
+        print("Choose at most one of --faster-rcnn-only / --yolo-only", file=sys.stderr)
         return 2
 
     # 1) Download / normalize
     if args.skip_download:
-        if not _is_valid_layout(args.dataset_dir):
+        if not is_valid_layout(args.dataset_dir):
             print(
                 f"Missing/invalid dataset at {args.dataset_dir}. "
                 "Run without --skip-download or run download_dataset.py first.",
@@ -131,9 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Using existing dataset {args.dataset_dir}")
     else:
         download_and_normalize(dest=args.dataset_dir)
-        checksum_path = Path(f"{args.dataset_dir}.sha256")
-        digest = hash_directory(args.dataset_dir)
-        checksum_path.write_text(digest + "\n", encoding="utf-8")
+        checksum_path, _ = write_checksum(args.dataset_dir)
         print(f"Wrote {checksum_path}")
 
     # 2) Subsample
@@ -145,28 +146,22 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
     )
 
-    frcnn_out = args.output_dir / "faster_rcnn"
-    yolo_out = args.output_dir / "yolo"
-    run_frcnn = not args.yolo_only
-    run_yolo = not args.frcnn_only
-
-    best: Path | None = None
-    if run_frcnn:
+    if not args.yolo_only:
         print("=== Faster R-CNN smoke train ===")
-        best = _run_frcnn_smoke(
+        best = _run_faster_rcnn_smoke(
             smoke_root=args.smoke_dir,
-            output_dir=frcnn_out,
+            output_dir=args.output_dir / "faster_rcnn",
             epochs=args.epochs,
         )
         if not args.skip_eval and best.exists():
             print("=== Faster R-CNN smoke eval ===")
-            _run_frcnn_eval(checkpoint=best, smoke_root=args.smoke_dir)
+            _run_faster_rcnn_eval(checkpoint=best, smoke_root=args.smoke_dir)
 
-    if run_yolo:
+    if not args.faster_rcnn_only:
         print("=== YOLO smoke train ===")
         _run_yolo_smoke(
             smoke_root=args.smoke_dir,
-            output_dir=yolo_out,
+            output_dir=args.output_dir / "yolo",
             epochs=args.epochs,
         )
 
@@ -181,7 +176,7 @@ Next steps (full train / promote - not run automatically):
       --checkpoint training/outputs/faster_rcnn/best_model.pth \\
       --version v1.1.0
   # or reuse HF weights for serve:
-  python -m training.scripts.promote_from_hf
+  python -m training.scripts.promote_from_hf --revision <commit-sha>
 """.strip()
     )
     return 0

@@ -11,14 +11,19 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+from training.data.layout import list_images, write_dataset_yaml
+from training.scripts.verify_dataset import write_checksum
 
-from training.scripts.verify_dataset import hash_directory
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 DATASET_ZIP_URL = (
     "https://github.com/ultralytics/assets/releases/download/v0.0.0/brain-tumor.zip"
 )
-IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+_DOWNLOAD_CHUNK = 64 * 1024
+_MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
+_MAX_ZIP_ENTRIES = 4096
+_MAX_ZIP_UNCOMPRESSED = 2 * 1024 * 1024 * 1024
+_MAX_ZIP_RATIO = 100
 
 KAGGLE_FALLBACK = """
 Download failed from Ultralytics assets.
@@ -34,19 +39,53 @@ Primary URL:
 """.strip()
 
 
-def _is_valid_layout(root: Path) -> bool:
+def safe_extract_zip(zf: zipfile.ZipFile, dest: Path | str) -> None:
+    """Extract ``zf`` into ``dest`` with zip-slip / zip-bomb guards."""
+    dest_root = Path(dest).resolve()
+    dest_root.mkdir(parents=True, exist_ok=True)
+    infos = zf.infolist()
+    if len(infos) > _MAX_ZIP_ENTRIES:
+        raise ValueError("zip has too many entries")
+    total_size = 0
+    for info in infos:
+        name = info.filename.replace("\\", "/")
+        if name.startswith("/") or Path(name).is_absolute() or ".." in Path(name).parts:
+            raise ValueError(f"unsafe zip member: {info.filename}")
+        if (
+            info.compress_size > 0
+            and info.file_size / info.compress_size > _MAX_ZIP_RATIO
+        ):
+            raise ValueError(f"zip bomb ratio: {info.filename}")
+        total_size += info.file_size
+        if total_size > _MAX_ZIP_UNCOMPRESSED:
+            raise ValueError("zip uncompressed size exceeds 2GiB")
+        target = (dest_root / name).resolve()
+        if not target.is_relative_to(dest_root):
+            raise ValueError(f"unsafe zip member: {info.filename}")
+        zf.extract(info, dest_root)
+
+
+def _stream_download(url: str, dest: Path) -> None:
+    """Stream ``url`` to ``dest`` in 64KiB chunks, aborting over 512MiB."""
+    with urllib.request.urlopen(url, timeout=120) as response, dest.open("wb") as fh:
+        total = 0
+        while True:
+            chunk = response.read(_DOWNLOAD_CHUNK)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _MAX_DOWNLOAD_BYTES:
+                raise ValueError("download exceeds 512MiB")
+            fh.write(chunk)
+
+
+def is_valid_layout(root: Path) -> bool:
     """Return True when normalized train/valid image dirs exist and are non-empty."""
     train_images = root / "train" / "images"
     valid_images = root / "valid" / "images"
     if not train_images.is_dir() or not valid_images.is_dir():
         return False
-    train_n = sum(
-        1 for p in train_images.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES
-    )
-    valid_n = sum(
-        1 for p in valid_images.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES
-    )
-    return train_n > 0 and valid_n > 0
+    return bool(list_images(train_images)) and bool(list_images(valid_images))
 
 
 def _find_split_dirs(extracted: Path) -> tuple[Path, Path, Path | None, Path | None]:
@@ -115,9 +154,7 @@ def _copy_split(
     dest_images.mkdir(parents=True, exist_ok=True)
     dest_labels.mkdir(parents=True, exist_ok=True)
     count = 0
-    for image_path in sorted(src_images.iterdir()):
-        if not image_path.is_file() or image_path.suffix.lower() not in IMAGE_SUFFIXES:
-            continue
+    for image_path in list_images(src_images):
         shutil.copy2(image_path, dest_images / image_path.name)
         label_name = image_path.stem + ".txt"
         label_src: Path | None = None
@@ -137,21 +174,6 @@ def _copy_split(
     return count
 
 
-def _write_yaml(dest: Path) -> None:
-    """Write Ultralytics-compatible dataset YAML for the normalized layout."""
-    content = """# Brain-tumor dataset (normalized for this repo)
-# Source: https://docs.ultralytics.com/datasets/detect/brain-tumor/
-path: .
-train: train/images
-val: valid/images
-
-names:
-  0: negative
-  1: positive
-"""
-    dest.write_text(content, encoding="utf-8")
-
-
 def download_and_normalize(
     *,
     dest: Path,
@@ -160,7 +182,7 @@ def download_and_normalize(
     force: bool = False,
 ) -> Path:
     """Download (or use local zip), normalize layout, write yaml, return dest."""
-    if _is_valid_layout(dest) and not force:
+    if is_valid_layout(dest) and not force:
         print(f"Dataset already present at {dest} (use --force to re-download)")
         return dest
 
@@ -182,16 +204,15 @@ def download_and_normalize(
             local_zip = work / "brain-tumor.zip"
             print(f"Downloading {zip_url} ...")
             try:
-                with urllib.request.urlopen(zip_url, timeout=120) as response:
-                    local_zip.write_bytes(response.read())
-            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                _stream_download(zip_url, local_zip)
+            except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
                 print(KAGGLE_FALLBACK.format(url=zip_url), file=sys.stderr)
                 raise SystemExit(1) from exc
 
         extract_dir = work / "extracted"
         extract_dir.mkdir()
         with zipfile.ZipFile(local_zip, "r") as zf:
-            zf.extractall(extract_dir)
+            safe_extract_zip(zf, extract_dir)
 
         train_img, val_img, train_lbl, val_lbl = _find_split_dirs(extract_dir)
         n_train = _copy_split(
@@ -206,7 +227,7 @@ def download_and_normalize(
             dest_images=dest / "valid" / "images",
             dest_labels=dest / "valid" / "labels",
         )
-        _write_yaml(dest / "brain-tumor.yaml")
+        write_dataset_yaml(dest / "brain-tumor.yaml")
         print(f"Normalized dataset -> {dest} (train={n_train}, valid={n_val})")
     finally:
         if work.exists():
@@ -246,9 +267,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if not args.skip_checksum:
-        checksum_path = Path(f"{args.dest}.sha256")
-        digest = hash_directory(args.dest)
-        checksum_path.write_text(digest + "\n", encoding="utf-8")
+        checksum_path, digest = write_checksum(args.dest)
         print(f"Wrote {checksum_path}: {digest}")
 
     return 0

@@ -2,38 +2,38 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pydantic import BaseModel, Field, PositiveFloat, PositiveInt
 
-from pydantic import BaseModel, Field, NonNegativeFloat, PositiveInt
+from ml.core.constants import (
+    DEFAULT_SCORE_THRESHOLD,
+    FASTER_RCNN_MODEL_VERSION,
+    FASTER_RCNN_NUM_CLASSES,
+)
 
 
 class DataConfig(BaseModel):
-    """Dataset and dataloader configuration."""
+    """Dataloader configuration."""
 
-    train_path: Path = Path("data/raw/v1/train")
-    val_path: Path = Path("data/raw/v1/valid")
-    dataset_version: str = "v1"
     batch_size: PositiveInt = Field(default=4, description="Per-device batch size")
-    num_workers: int = Field(default=2, ge=0)
-    image_size: PositiveInt = Field(default=640)
+    num_workers: int = Field(default=0, ge=0)
 
 
 class ModelConfig(BaseModel):
     """Architecture configuration shared by train and serve."""
 
     name: str = "faster_rcnn_resnet50_fpn"
-    num_classes: PositiveInt = 3
-    score_threshold: NonNegativeFloat = Field(default=0.5, le=1.0)
-    version: str = "resnet50-fpn-v1"
+    num_classes: PositiveInt = FASTER_RCNN_NUM_CLASSES
+    score_threshold: float = Field(default=DEFAULT_SCORE_THRESHOLD, ge=0.0, le=1.0)
+    version: str = FASTER_RCNN_MODEL_VERSION
 
 
 class TrainConfig(BaseModel):
     """Training hyperparameters."""
 
-    learning_rate: NonNegativeFloat = Field(default=0.005)
-    momentum: NonNegativeFloat = Field(default=0.9)
-    weight_decay: NonNegativeFloat = Field(default=0.0005)
-    epochs: PositiveInt = Field(default=10)
+    learning_rate: PositiveFloat = 0.005
+    momentum: float = Field(default=0.9, ge=0.0, lt=1.0)
+    weight_decay: float = Field(default=0.0005, ge=0.0)
+    epochs: PositiveInt = 10
     seed: int = 42
     gradient_accumulation_steps: PositiveInt = 1
     data: DataConfig = Field(default_factory=DataConfig)

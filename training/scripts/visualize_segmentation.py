@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Visualize a MedNeXt segmentation checkpoint on one BraTS case.
 
-Produces <case>_pred.nii.gz plus a PNG overlay (axial/coronal/sagittal).
-Auto-detects n_classes from the checkpoint (3 = legacy TC/WT/ET head,
-4 = disjoint bg/NCR/ED/ET).
+Produces <case>_pred.nii.gz plus a PNG overlay (sagittal/coronal/axial).
+The checkpoint must be the 4-class disjoint bg/NCR/ED/ET head trained in
+``training/notebooks/mednext_xs_brats.ipynb``.
 """
 
 from __future__ import annotations
@@ -28,49 +28,36 @@ from nibabel.orientations import (
     ornt_transform,
 )
 
+from ml.core.labels import REGIONS
+from ml.models.swin_unetr import dice, normalize_nonzero
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _MODALITIES = ("flair", "t1", "t1ce", "t2")
-_REGION_COLORS = {1: "#f59e0b", 2: "#10b981", 4: "#ef4444"}
-_VIEWS = ("axial", "coronal", "sagittal")
+# Network output class index -> BraTS label (class 0 is background).
+_CLASS_TO_LABEL = {1: 1, 2: 2, 3: 4}
+_REGION_COLORS = {r.label: tuple(c / 255 for c in r.color) for r in REGIONS}
 
 
-def _class_to_label(n_classes: int) -> dict[int, int]:
-    if n_classes == 4:
-        return {1: 1, 2: 2, 3: 4}
-    return {0: 1, 1: 2, 2: 4}
-
-
-_XS_CONFIG = {
-    "exp_r": [2, 3, 4, 4, 4, 4, 4, 3, 2],
-    "deep_supervision": False,
-    "do_res": True,
-    "do_res_up_down": True,
-    "block_counts": [2] * 9,
-    "norm_type": "group",
-    "dim": "3d",
-}
-
-
-def _build_model(state: dict, n_classes: int) -> torch.nn.Module:
-    """Build MedNeXt matching the checkpoint (XS layout or legacy defaults)."""
+def _build_model(state: dict) -> torch.nn.Module:
+    """Build the MedNeXt-XS network and load ``state`` strictly."""
     from nnunet_mednext.network_architecture.mednextv1.MedNextV1 import MedNeXt
 
-    last_error: RuntimeError | None = None
-    for extra in (_XS_CONFIG, {}):
-        model = MedNeXt(
-            in_channels=4,
-            n_channels=32,
-            n_classes=n_classes,
-            kernel_size=5,
-            grn=True,
-            **extra,
-        )
-        try:
-            model.load_state_dict(state, strict=True)
-            return model
-        except RuntimeError as exc:
-            last_error = exc
-    raise RuntimeError("checkpoint matches no known MedNeXt layout") from last_error
+    model = MedNeXt(
+        in_channels=4,
+        n_channels=32,
+        n_classes=len(_CLASS_TO_LABEL) + 1,
+        exp_r=[2, 3, 4, 4, 4, 4, 4, 3, 2],
+        kernel_size=5,
+        deep_supervision=False,
+        do_res=True,
+        do_res_up_down=True,
+        block_counts=[2] * 9,
+        norm_type="group",
+        dim="3d",
+        grn=True,
+    )
+    model.load_state_dict(state, strict=True)
+    return model
 
 
 def predict_volume(
@@ -83,8 +70,7 @@ def predict_volume(
     """Return (mask uint8 in native grid, affine, seconds)."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     state = torch.load(weights_path, map_location="cpu", weights_only=True)
-    n_classes = int(state["out_0.conv_out.weight"].shape[1])
-    model = _build_model(state, n_classes)
+    model = _build_model(state)
     model.eval().to(device)
 
     images: list[np.ndarray] = []
@@ -97,12 +83,7 @@ def predict_volume(
     to_ras = ornt_transform(io_orientation(affine), axcodes2ornt("RAS"))
     back = ornt_transform(axcodes2ornt("RAS"), io_orientation(affine))
     volume = np.stack([apply_orientation(x, to_ras) for x in images], axis=0)
-    for channel in range(volume.shape[0]):
-        vals = volume[channel][volume[channel] > 0]
-        if vals.size:
-            mean, std = float(vals.mean()), float(vals.std())
-            if std > 0:
-                volume[channel] = (volume[channel] - mean) / std
+    normalize_nonzero(volume)
 
     start = time.perf_counter()
     tensor = torch.from_numpy(np.ascontiguousarray(volume)).unsqueeze(0).to(device)
@@ -123,9 +104,8 @@ def predict_volume(
 
     cls = logits[0].argmax(dim=0).detach().cpu().numpy().astype(np.uint8)
     cls = apply_orientation(cls, back)
-    mapping = _class_to_label(n_classes)
     mask = np.zeros(cls.shape, dtype=np.uint8)
-    for class_idx, label_value in mapping.items():
+    for class_idx, label_value in _CLASS_TO_LABEL.items():
         mask[cls == class_idx] = label_value
     return mask, affine, seconds
 
@@ -143,16 +123,17 @@ def save_overlay_png(
     )
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    # BraTS volumes are stored (x: left-right, y: front-back, z: bottom-top).
     slices = (
-        (image[center[0], :, :], mask[center[0], :, :], "axial"),
+        (image[center[0], :, :], mask[center[0], :, :], "sagittal"),
         (image[:, center[1], :], mask[:, center[1], :], "coronal"),
-        (image[:, :, center[2]], mask[:, :, center[2]], "sagittal"),
+        (image[:, :, center[2]], mask[:, :, center[2]], "axial"),
     )
     for ax, (img_slice, mask_slice, name) in zip(axes, slices, strict=True):
         ax.imshow(img_slice.T, cmap="gray", origin="lower")
         rgba = np.zeros((*mask_slice.shape, 4))
-        for label_value, hex_color in _REGION_COLORS.items():
-            rgba[mask_slice == label_value] = matplotlib.colors.to_rgba(hex_color, 0.45)
+        for label_value, color in _REGION_COLORS.items():
+            rgba[mask_slice == label_value] = (*color, 0.45)
         ax.imshow(rgba.transpose(1, 0, 2), origin="lower")
         ax.set_title(name)
         ax.axis("off")
@@ -189,9 +170,6 @@ def main(argv: list[str] | None = None) -> int:
     gt_files = sorted(args.case.glob("*_seg.nii*"))
     if gt_files:
         gt = nib.load(gt_files[0]).get_fdata().astype(np.uint8)
-        from ml.backbone.segment3d import dice
-        from ml.core.labels import REGIONS
-
         print(
             "dice vs expert:",
             {

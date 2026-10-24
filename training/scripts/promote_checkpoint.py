@@ -11,11 +11,11 @@ import argparse
 import sys
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
 from training.scripts.export_safetensors import export_and_promote
 from training.scripts.promote_yolo import promote_yolo
-from training.scripts.registry import RegistryGuardError
+from training.scripts.registry import RegistryGuardError, ensure_promotable
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -48,19 +48,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if args.version == "v1.0.0" and not args.i_know:
-        print(
-            "Refusing to promote to v1.0.0 without --i-know "
-            "(use a smoke version, or pass --i-know).",
-            file=sys.stderr,
-        )
-        return 2
-
-    if not args.checkpoint.exists():
-        print(f"Checkpoint not found: {args.checkpoint}", file=sys.stderr)
-        return 1
-
     try:
+        ensure_promotable(args.version, i_know=args.i_know)
+        if not args.checkpoint.exists():
+            print(f"Checkpoint not found: {args.checkpoint}", file=sys.stderr)
+            return 1
+
         if args.model == "faster_rcnn":
             out = export_and_promote(
                 checkpoint=args.checkpoint,

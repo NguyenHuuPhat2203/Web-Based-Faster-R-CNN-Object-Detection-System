@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import hmac
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from ...config import get_settings
+from ...core import security
 from ...core.database import get_db
+from ...core.exceptions import OAuthError
+from ...core.rate_limit import enforce_auth_rate_limit
 from ...models import User
 from ...schemas.auth import (
     LoginRequest,
@@ -30,11 +35,16 @@ from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+OAUTH_COOKIE_NAME = "oauth_tx"
+OAUTH_COOKIE_PATH = "/auth/google"
+OAUTH_COOKIE_MAX_AGE_SECONDS = 600
+
 
 @router.post("/register", response_model=UserWithTokens)
 def register(
     body: RegisterRequest,
     db: Annotated[Session, Depends(get_db)],
+    _rate_limit: Annotated[None, Depends(enforce_auth_rate_limit)],
 ) -> UserWithTokens:
     """Register a new local user account."""
     return AuthService(db).register(body.email, body.username, body.password)
@@ -44,6 +54,7 @@ def register(
 def login(
     body: LoginRequest,
     db: Annotated[Session, Depends(get_db)],
+    _rate_limit: Annotated[None, Depends(enforce_auth_rate_limit)],
 ) -> UserWithTokens:
     """Authenticate a local user and issue tokens."""
     return AuthService(db).authenticate(body.email, body.password)
@@ -64,7 +75,7 @@ def refresh(
     body: RefreshRequest,
     db: Annotated[Session, Depends(get_db)],
 ) -> TokenResponse:
-    """Issue a new token pair from a refresh token."""
+    """Rotate a refresh token into a new token pair."""
     return AuthService(db).refresh(body.refresh_token)
 
 
@@ -107,17 +118,41 @@ def user_stats(
 
 
 @router.get("/google")
-def google_login(db: Annotated[Session, Depends(get_db)]) -> dict[str, str]:
-    """Return the Google OAuth consent-screen URL."""
-    return {"redirect_url": AuthService(db).get_google_auth_url()}
+def google_login(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    _rate_limit: Annotated[None, Depends(enforce_auth_rate_limit)],
+) -> dict[str, str]:
+    """Start Google OAuth: return the consent URL and set the transaction cookie."""
+    url, cookie, state = AuthService(db).get_google_auth_url()
+    response.set_cookie(
+        key=OAUTH_COOKIE_NAME,
+        value=cookie,
+        httponly=True,
+        samesite="lax",
+        max_age=OAUTH_COOKIE_MAX_AGE_SECONDS,
+        path=OAUTH_COOKIE_PATH,
+        secure=get_settings().frontend_url.startswith("https"),
+    )
+    return {"redirect_url": url, "state": state}
 
 
 @router.get("/google/callback")
 def google_callback(
     code: str,
+    state: str,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
+    _rate_limit: Annotated[None, Depends(enforce_auth_rate_limit)],
 ) -> RedirectResponse:
-    """Handle the Google OAuth callback and redirect to the frontend."""
+    """Finish Google OAuth and redirect to the frontend with application tokens."""
+    raw_cookie = request.cookies.get(OAUTH_COOKIE_NAME)
+    expected_state, verifier = security.load_oauth_tx(raw_cookie or "")
+    # Compare bytes: str comparison raises TypeError on non-ASCII input.
+    if not hmac.compare_digest(expected_state.encode(), state.encode()):
+        raise OAuthError("Invalid OAuth state")
     service = AuthService(db)
-    tokens = service.google_login_or_register(code)
-    return RedirectResponse(url=service.build_oauth_redirect(tokens))
+    tokens = service.google_login_or_register(code, verifier)
+    redirect = RedirectResponse(url=service.build_oauth_redirect(tokens, state))
+    redirect.delete_cookie(OAUTH_COOKIE_NAME, path=OAUTH_COOKIE_PATH)
+    return redirect

@@ -22,9 +22,9 @@ def mock_ml_models(monkeypatch: pytest.MonkeyPatch) -> None:
             model_type=self.adapter.model_type,
             model_version="test",
             boxes=[[10, 20, 100, 120], [30, 40, 90, 110]],
-            labels=[1, 1],
+            labels=[2, 1],
             scores=[0.9, 0.3],
-            label_names=["Brain tumor", "Brain tumor"],
+            label_names=["positive", "negative"],
         )
 
     monkeypatch.setattr(

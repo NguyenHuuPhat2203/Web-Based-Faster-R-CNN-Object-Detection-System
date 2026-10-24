@@ -12,19 +12,20 @@ import shutil
 import sys
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
 from training.scripts.export_safetensors import export_and_promote
 from training.scripts.promote_yolo import promote_yolo
-from training.scripts.registry import RegistryGuardError
+from training.scripts.registry import RegistryGuardError, ensure_promotable
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _download_frcnn_checkpoint(
+def _download_faster_rcnn_checkpoint(
     *,
     dest: Path,
     repo_id: str,
     filename: str,
     token: str | None,
+    revision: str,
 ) -> Path:
     """Download HF checkpoint into ``dest`` (copied from hub cache)."""
     from huggingface_hub import hf_hub_download
@@ -35,6 +36,7 @@ def _download_frcnn_checkpoint(
             repo_id=repo_id,
             filename=filename,
             token=token,
+            revision=revision,
         )
     )
     shutil.copy2(cached, dest)
@@ -55,6 +57,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Checkpoint filename inside the HF repo",
     )
     parser.add_argument("--token", default=None, help="Optional HF access token")
+    parser.add_argument(
+        "--revision",
+        required=True,
+        help="Hugging Face revision (commit SHA or tag); required, no default",
+    )
     parser.add_argument(
         "--checkpoint-dir",
         type=Path,
@@ -78,12 +85,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--i-know", action="store_true", help="Allow v1.0.0")
     args = parser.parse_args(argv)
 
-    if args.version == "v1.0.0" and not args.i_know:
-        print(
-            "Refusing to promote to v1.0.0 without --i-know "
-            "(use a smoke version, or pass --i-know).",
-            file=sys.stderr,
-        )
+    try:
+        ensure_promotable(args.version, i_know=args.i_know)
+    except RegistryGuardError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
 
     checkpoint_path = args.checkpoint_dir / "model.pth"
@@ -93,11 +98,12 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     else:
         print(f"Downloading {args.repo_id}/{args.filename} ...")
-        _download_frcnn_checkpoint(
+        _download_faster_rcnn_checkpoint(
             dest=checkpoint_path,
             repo_id=args.repo_id,
             filename=args.filename,
             token=args.token,
+            revision=args.revision,
         )
         print(f"Saved {checkpoint_path}")
 

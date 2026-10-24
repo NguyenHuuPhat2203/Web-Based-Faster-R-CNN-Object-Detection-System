@@ -17,6 +17,7 @@ class PredictionResult(BaseModel):
     heatmap: str | None = None
     model_type: str | None = None
     model_version: str | None = None
+    image_id: int | None = None
 
     model_config = {"from_attributes": True}
 

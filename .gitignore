@@ -1,29 +1,45 @@
-.venv
-__pycache__
-node_modules
-checkpoints
-uploads/
-.env
-*.db
-*.md
-!README.md
-!ARCHITECTURE.md
-!registry/README.md
-!training/notebooks/README.md
-!models/README.md
-.DS_Store
-.superpowers/
-data/raw/
-!data/raw/.gitkeep
-registry/**/*.safetensors
-registry/**/*.pt
-registry/**/*.pth
-!registry/**/metadata.json
-!registry/**/.gitkeep
-training/outputs/
+# Python
+.venv/
+__pycache__/
 *.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Node / build output
+node_modules/
 dist/
 build/
+
+# Secrets and local runtime state
+.env
+*.db
+uploads/
+
+# Data, weights, and training output (large; never committed)
+data/raw/
+!data/raw/.gitkeep
 data/BraTS2021_Training_Data/
 data/BraTS2021_Training_Data.zip
 .weights/
+checkpoints/
+training/outputs/
+registry/**/*.safetensors
+registry/**/*.pt
+registry/**/*.pth
+
+# Local AI-assistant tooling and machine notes
+.claude/
+.clinerules/
+.cursor/
+.opencode/
+.windsurf/
+.superpowers/
+.pi-subagents/
+.gitnexus/
+/AGENTS.md
+/CLAUDE.md
+/MIGRATE_HF.md
+
+# OS
+.DS_Store

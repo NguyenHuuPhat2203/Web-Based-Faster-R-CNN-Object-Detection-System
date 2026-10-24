@@ -4,6 +4,12 @@
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+# Archived experiment notebooks: kept for history, not maintained code.
+extend-exclude = [
+    "training/notebooks/faster_rcnn_scratch.ipynb",
+    "training/notebooks/faster_rcnn_training.ipynb",
+    "training/notebooks/yolov8_training.ipynb",
+]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "D", "UP", "B"]

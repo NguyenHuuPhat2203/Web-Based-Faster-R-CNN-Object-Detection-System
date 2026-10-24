@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import torch
 
-from ml.core.constants import FRCNN_CLASS_NAMES
 from ml.core.entities import InferenceResult
 
 
@@ -35,26 +34,18 @@ def tensors_to_inference_result(
     scores: torch.Tensor,
     labels: torch.Tensor,
     *,
-    class_names: dict[int, str] | None = None,
+    class_names: dict[int, str],
     model_type: str,
     model_version: str,
     heatmap: str | None = None,
 ) -> InferenceResult:
     """Convert filtered tensors into an ``InferenceResult``."""
-    names = class_names or FRCNN_CLASS_NAMES
-    box_list = boxes.detach().cpu().tolist() if boxes.numel() else []
-    label_list = (
-        [int(x) for x in labels.detach().cpu().tolist()] if labels.numel() else []
-    )
-    score_list = (
-        [float(x) for x in scores.detach().cpu().tolist()] if scores.numel() else []
-    )
-    label_names = [names.get(label, f"Class {label}") for label in label_list]
+    label_list = [int(label) for label in labels.tolist()]
     return InferenceResult(
-        boxes=box_list,
+        boxes=[[float(v) for v in box] for box in boxes.tolist()],
         labels=label_list,
-        scores=score_list,
-        label_names=label_names,
+        scores=[float(score) for score in scores.tolist()],
+        label_names=[class_names.get(label, f"class_{label}") for label in label_list],
         heatmap=heatmap,
         model_type=model_type,
         model_version=model_version,

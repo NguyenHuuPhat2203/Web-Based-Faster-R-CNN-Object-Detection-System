@@ -39,63 +39,82 @@ export function logout(): void {
   clearTokens();
 }
 
-export async function refreshTokens(): Promise<boolean> {
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function requestRefresh(): Promise<boolean> {
   const rt = getRefreshToken();
   if (!rt) return false;
 
-  try {
-    const res = await fetch(`${API_BASE}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: rt }),
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    setTokens(data.access_token, data.refresh_token);
-    return true;
-  } catch {
-    return false;
-  }
+  const res = await fetch(`${API_BASE}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: rt }),
+  });
+  // Server outage is not a dead session: surface it instead of logging out.
+  if (res.status >= 500) throw new Error(`Refresh failed (${res.status})`);
+  if (!res.ok) return false;
+  const data = await res.json();
+  setTokens(data.access_token, data.refresh_token);
+  return true;
+}
+
+/**
+ * Refresh the token pair. Concurrent callers share one request: refresh tokens
+ * are single-use, so parallel refreshes would invalidate each other.
+ * Resolves false when the session is rejected; rejects on network/server errors.
+ */
+export function refreshTokens(): Promise<boolean> {
+  refreshInFlight ??= requestRefresh().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 export async function authFetch(
   path: string,
   options: RequestInit = {},
 ): Promise<Response> {
-  const token = getAccessToken();
+  const sentToken = getAccessToken();
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
   };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (sentToken) headers["Authorization"] = `Bearer ${sentToken}`;
 
-  let res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  if (res.status !== 401 || !getRefreshToken()) return res;
 
-  // Token expired → try refreshing once
-  if (res.status === 401 && getRefreshToken()) {
-    const ok = await refreshTokens();
-    if (ok) {
-      headers["Authorization"] = `Bearer ${getAccessToken()}`;
-      res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-    } else {
-      // Refresh failed → session is dead: clear tokens and let the auth gate
-      // redirect to /login (RequireAuth picks this up via the event).
+  // Another request may already have rotated the tokens while this one was in flight.
+  let renewed = getAccessToken() !== sentToken;
+  if (!renewed) {
+    try {
+      renewed = await refreshTokens();
+    } catch {
+      return res; // transient failure: keep the session, surface the 401
+    }
+    if (!renewed) {
+      // Session is dead: clear tokens and let the auth gate redirect to /login.
       clearTokens();
       window.dispatchEvent(new Event("auth:expired"));
+      return res;
     }
   }
-
-  return res;
+  headers["Authorization"] = `Bearer ${getAccessToken()}`;
+  return fetch(`${API_BASE}${path}`, { ...options, headers });
 }
 
-export function processOAuthTokens() {
+export function processOAuthTokens(): boolean {
   const hash = window.location.hash.substring(1);
   const params = new URLSearchParams(hash);
   const access = params.get("access_token");
   const refresh = params.get("refresh_token");
-  if (access && refresh) {
-    setTokens(access, refresh);
+  const state = params.get("state");
+  const expected = sessionStorage.getItem("oauth_state");
+  const accepted = Boolean(access && refresh && expected && expected === state);
+  if (accepted) {
+    setTokens(access as string, refresh as string);
+    sessionStorage.removeItem("oauth_state");
   }
-  // Clean the URL
   window.location.hash = "";
   window.history.replaceState(null, "", window.location.pathname);
+  return accepted;
 }

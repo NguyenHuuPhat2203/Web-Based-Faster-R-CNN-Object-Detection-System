@@ -7,7 +7,9 @@ shape live once. Sources vary only in how weights are converted.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -17,6 +19,7 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 PRODUCTION_VERSION = "v1.0.0"
+_VERSION_RE = re.compile(r"^v[0-9]+(?:\.[0-9]+){1,2}(?:-[A-Za-z0-9.]+)?$")
 
 
 class RegistryGuardError(ValueError):
@@ -35,8 +38,24 @@ def _git_commit() -> str:
             .decode()
             .strip()
         )
-    except Exception:
+    except (OSError, subprocess.CalledProcessError):
         return "unknown"
+
+
+def ensure_promotable(version: str, *, i_know: bool) -> None:
+    """Validate a registry version name and guard the production slot.
+
+    Raises:
+        RegistryGuardError: If the version is malformed, or is the production
+            version and ``i_know`` is false.
+    """
+    if not _VERSION_RE.fullmatch(version):
+        raise RegistryGuardError(f"Invalid registry version: {version}")
+    if version == PRODUCTION_VERSION and not i_know:
+        raise RegistryGuardError(
+            f"Refusing to promote to {PRODUCTION_VERSION} without --i-know "
+            "(use a smoke version, or pass --i-know)."
+        )
 
 
 def write_registry_entry(
@@ -51,7 +70,6 @@ def write_registry_entry(
     convert: Callable[[Path, Path], None] | None = None,
     registry_root: Path,
     i_know: bool = False,
-    source_checkpoint: str | None = None,
 ) -> Path:
     """Write one model entry into the registry; returns the weights path.
 
@@ -66,24 +84,27 @@ def write_registry_entry(
         convert: Optional converter ``(src, dest)``; ``None`` copies as-is.
         registry_root: Registry root directory.
         i_know: Explicit confirmation to write the production slot.
-        source_checkpoint: Original checkpoint path recorded in metadata.
 
     Raises:
-        RegistryGuardError: If ``version == v1.0.0`` and ``i_know`` is False.
+        RegistryGuardError: If the version is unsafe or would overwrite
+            production without ``i_know``.
     """
-    if version == PRODUCTION_VERSION and not i_know:
-        raise RegistryGuardError(
-            f"Refusing to promote to {PRODUCTION_VERSION} without i_know "
-            "(use a smoke version, or pass --i-know)."
-        )
+    ensure_promotable(version, i_know=i_know)
 
-    out_dir = registry_root / model_key / version
+    root = registry_root.resolve()
+    out_dir = (root / model_key / version).resolve()
+    if not out_dir.is_relative_to(root):
+        raise RegistryGuardError(f"Registry path escapes root: {out_dir} (root={root})")
+
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / weights_name
     if convert is None:
         shutil.copy2(weights_src, out_path)
     else:
         convert(weights_src, out_path)
+
+    with out_path.open("rb") as fh:
+        weights_sha256 = hashlib.file_digest(fh, "sha256").hexdigest()
 
     metadata = {
         "model_type": model_key,
@@ -94,7 +115,8 @@ def write_registry_entry(
         "git_commit": _git_commit(),
         "created_at": datetime.now(UTC).isoformat(),
         "weights": out_path.name,
-        "source_checkpoint": source_checkpoint or str(weights_src),
+        "weights_sha256": weights_sha256,
+        "source_checkpoint": str(weights_src),
     }
     (out_dir / "metadata.json").write_text(
         json.dumps(metadata, indent=2) + "\n", encoding="utf-8"

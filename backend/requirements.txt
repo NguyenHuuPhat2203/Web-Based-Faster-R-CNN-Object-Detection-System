@@ -16,7 +16,9 @@ pydantic-settings
 ultralytics
 reportlab
 matplotlib
-huggingface_hub
+nibabel
+monai
+einops
 alembic
 safetensors
 structlog
