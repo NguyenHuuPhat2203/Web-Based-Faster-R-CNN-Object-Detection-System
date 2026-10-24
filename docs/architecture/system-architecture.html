@@ -25,7 +25,7 @@
 
   <svg viewBox="0 0 960 768" role="img" aria-labelledby="arch-title arch-desc" xmlns="http://www.w3.org/2000/svg">
     <title id="arch-title">NeuroScan System Architecture</title>
-    <desc id="arch-desc">Layered architecture: a React frontend talks to a FastAPI backend whose FRCNN/YOLO pipelines run over a shared ml kernel with SQLite storage, fed by an offline training and registry layer that consumes external datasets.</desc>
+    <desc id="arch-desc">Layered architecture: a React frontend talks to a FastAPI backend whose Faster R-CNN/YOLO pipelines run over a shared ml kernel with SQLite storage, fed by an offline training and registry layer that consumes external datasets.</desc>
 
     <defs>
       <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
@@ -106,14 +106,14 @@
     <rect x="388" y="206" width="36" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
     <text x="406" y="215" fill="rgba(45,49,66,0.80)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PIPE</text>
     <text x="480" y="234" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Pipelines</text>
-    <text x="480" y="250" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">FRCNN · YOLO · GradCAM</text>
+    <text x="480" y="250" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Faster R-CNN · YOLO · GradCAM</text>
     <!-- ml kernel (focal) -->
     <rect x="700" y="200" width="200" height="64" rx="6" fill="#f5f5f5"/>
     <rect x="700" y="200" width="200" height="64" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
     <rect x="708" y="206" width="28" height="12" rx="2" fill="transparent" stroke="rgba(235,108,54,0.50)" stroke-width="0.8"/>
     <text x="722" y="215" fill="rgba(235,108,54,0.85)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ML</text>
     <text x="800" y="234" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ml/ Kernel</text>
-    <text x="800" y="250" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">backbone · core · transforms</text>
+    <text x="800" y="250" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">models · core · transforms</text>
     <!-- Storage -->
     <rect x="60" y="360" width="200" height="64" rx="6" fill="#f5f5f5"/>
     <rect x="60" y="360" width="200" height="64" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
