@@ -12,7 +12,6 @@ import pytest
         "training.scripts.evaluate",
         "training.scripts.export_safetensors",
         "training.scripts.promote_checkpoint",
-        "training.scripts.promote_from_hf",
         "training.scripts.promote_yolo",
         "training.scripts.run_e2e_smoke",
         "training.scripts.subsample_dataset",
@@ -67,24 +66,6 @@ def test_promote_yolo_refuses_v1_without_flag() -> None:
         [
             "--checkpoint",
             str(Path("nonexistent.pt")),
-            "--version",
-            "v1.0.0",
-        ]
-    )
-    assert code == 2
-
-
-def test_promote_from_hf_refuses_v1_without_flag(tmp_path) -> None:
-    """The HF promote path needs --i-know before touching the production slot."""
-    from training.scripts.promote_from_hf import main
-
-    code = main(
-        [
-            "--checkpoint-dir",
-            str(tmp_path),
-            "--skip-download",
-            "--revision",
-            "abc123",
             "--version",
             "v1.0.0",
         ]

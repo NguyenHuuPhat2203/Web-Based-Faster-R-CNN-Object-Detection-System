@@ -18,6 +18,7 @@ backend/             inference and web shell
   core/              settings-independent infrastructure (db, security, logging)
 training/            training shell: data, trainer, scripts, notebooks, tests
 registry/            promoted weights (gitignored) + metadata.json (committed)
+scripts/             repo-level tools; sync_models.py syncs weights with Hugging Face
 ```
 
 ## Import rules
@@ -25,6 +26,8 @@ registry/            promoted weights (gitignored) + metadata.json (committed)
 - `backend` imports `ml`; `training` imports `ml`.
 - `backend` never imports `training`; `training` never imports `backend`.
 - `ml` imports neither.
+- `scripts` imports no project package; it needs only `huggingface_hub` and
+  `python-dotenv`.
 - Routers call services; services call repositories and `pipeline`; only
   repositories build queries.
 
@@ -70,8 +73,12 @@ painting WT as ED (2), then TC as NCR (1), then ET (4).
   strict key matching.
 - YOLOv8: `registry/yolo/<version>/yolov8_tumor.pt`, verified against
   `weights_sha256` in `metadata.json` when present.
-- Weights are never baked into images; Compose mounts `./registry` and
-  `./checkpoints` read-only.
+- Weights are never baked into images; Compose mounts `./registry`,
+  `./checkpoints`, and `./.weights` read-only.
+- One Hugging Face model repo mirrors every weight file under `registry/`,
+  `checkpoints/`, and `.weights/` at the same paths. `models.lock.json` pins
+  the Hub commit that matches the code: `python -m scripts.sync_models pull`
+  restores it, `push` uploads changes and moves the pin.
 
 ## Naming conventions
 

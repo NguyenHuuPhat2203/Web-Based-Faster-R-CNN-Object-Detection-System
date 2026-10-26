@@ -175,8 +175,8 @@ Next steps (full train / promote - not run automatically):
   python -m training.scripts.promote_checkpoint --model faster_rcnn \\
       --checkpoint training/outputs/faster_rcnn/best_model.pth \\
       --version v1.1.0
-  # or reuse HF weights for serve:
-  python -m training.scripts.promote_from_hf --revision <commit-sha>
+  # or fetch the pinned serving weights from Hugging Face:
+  python -m scripts.sync_models pull
 """.strip()
     )
     return 0

@@ -69,6 +69,7 @@ backend/             FastAPI application package
 training/            training, evaluation, export, promotion
   data/  trainer/  scripts/  notebooks/  tests/
 registry/            promoted model weights + metadata.json
+scripts/             repo-level tools: sync_models.py (weights <-> Hugging Face)
 frontend/            React application
 ```
 
@@ -94,14 +95,24 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 ### Model weights
 
-| Model | Path | Source |
+| Model | Path | Produced by |
 |---|---|---|
-| Faster R-CNN | `registry/faster_rcnn/<version>/model.safetensors` (falls back to `checkpoints/model.safetensors`, then `checkpoints/model.pth`) | `python -m training.scripts.promote_from_hf --revision <commit-or-tag>` |
-| YOLOv8 | `registry/yolo/<version>/yolov8_tumor.pt` (falls back to `checkpoints/yolov8_tumor.pt`) | `python -m training.scripts.promote_yolo` |
+| Faster R-CNN | `registry/faster_rcnn/<version>/model.safetensors` (falls back to `checkpoints/model.safetensors`, then `checkpoints/model.pth`) | `training.scripts.promote_checkpoint` or `export_safetensors` |
+| YOLOv8 | `registry/yolo/<version>/yolov8_tumor.pt` (falls back to `checkpoints/yolov8_tumor.pt`) | `training.scripts.promote_yolo` |
 | SwinUNETR | `.weights/fold0_f48_ep300_4gpu_dice0_8854/model.pt` (`SWIN_UNETR_WEIGHTS`) | MONAI research-contributions BRATS21 fold-0 release |
+| MedNeXt-XS (experiment) | `.weights/mednext_xs/mednext_xs_best.pth` | `training/notebooks/mednext_xs_brats.ipynb` |
 
-Missing weights are reported as errors; the API never downloads stock
-weights at runtime.
+All of these files live in one Hugging Face model repo at the same paths;
+`models.lock.json` pins the commit that matches the code. Copy `.env.example`
+to `.env` and set `HF_TOKEN` and `HF_MODEL_REPO_ID`, then:
+
+```bash
+python -m scripts.sync_models pull    # download the pinned weights
+python -m scripts.sync_models push    # upload changed weights, update the pin
+```
+
+Missing weights are reported as errors; the API never downloads weights at
+runtime.
 
 ## Run
 
@@ -120,11 +131,14 @@ npm install
 npm run dev
 ```
 
-Docker Compose (thin backend image; weights mounted from the host):
+Docker Compose (thin backend image; weights mounted from the host, so pull
+them first):
 
 ```bash
+python -m scripts.sync_models pull
 docker compose up --build
 ```
+
 
 ## Training
 
@@ -142,7 +156,7 @@ experiment notebooks live in `training/notebooks/`.
 ## Checks
 
 ```bash
-ruff check backend ml training && ruff format --check backend ml training
+ruff check backend ml training scripts && ruff format --check backend ml training scripts
 pytest -m "not overfit and not perf"
 cd frontend && npx tsc --noEmit && npm test && npm run build
 ```
