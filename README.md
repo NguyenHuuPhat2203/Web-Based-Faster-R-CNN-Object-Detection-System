@@ -139,6 +139,16 @@ python -m scripts.sync_models pull
 docker compose up --build
 ```
 
+Hugging Face Space (root `Dockerfile`, nginx + uvicorn on port 7860): every
+push to the Space rebuilds it, and the build pulls the weights pinned in
+`models.lock.json`, so push the weights and commit the lock first. Space
+secrets:
+
+- `SECRET_KEY`: required at runtime; the container exits without it.
+- `HF_TOKEN`: read token for the model repo, used during the build.
+
+The SQLite database and uploads live on the container disk and reset whenever
+the Space restarts.
 
 ## Training
 

@@ -31,19 +31,31 @@ ENV PYTHONPATH=/app
 FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 nginx supervisor curl cron \
+    libgomp1 nginx supervisor \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /etc/nginx/conf.d/default.conf
 
 WORKDIR /app
 
-# Copy backend deps + host-like package layout
+# Backend deps
 COPY --from=backend-build /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
 COPY --from=backend-build /usr/local/bin/ /usr/local/bin/
+
+# Model weights at the Hub commit pinned in models.lock.json; the Space secret
+# HF_TOKEN reads the private model repo. Placed before the app code so
+# code-only pushes reuse this layer.
+COPY scripts/sync_models.py /app/scripts/
+COPY models.lock.json /app/
+RUN --mount=type=secret,id=HF_TOKEN,mode=0444,required=true \
+    HF_TOKEN="$(cat /run/secrets/HF_TOKEN)" HF_HOME=/tmp/hf \
+    python scripts/sync_models.py pull \
+    && rm -rf /tmp/hf /app/.cache
+
 COPY backend/ /app/backend/
 COPY ml/ /app/ml/
+COPY registry/ /app/registry/
 
-RUN mkdir -p /checkpoints /app/uploads /var/log/cron
+RUN mkdir -p /app/uploads
 
 # Copy frontend
 COPY --from=frontend-build /app/frontend/dist /usr/share/nginx/html
@@ -85,7 +97,7 @@ server {
 }
 NGINX
 
-# Supervisor config — run nginx + uvicorn + cron
+# Supervisor config — run nginx + uvicorn
 RUN cat > /etc/supervisor/conf.d/app.conf <<'SUPERVISOR'
 [program:nginx]
 command=/usr/sbin/nginx -g "daemon off;"
@@ -106,24 +118,7 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-
-[program:cron]
-command=/usr/sbin/cron -f
-autostart=true
-autorestart=true
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
 SUPERVISOR
-
-# Hourly health check ping against the public endpoint
-RUN cat > /etc/cron.d/healthz <<'CRON'
-SHELL=/bin/sh
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-0 * * * * root curl -fsS http://127.0.0.1:7860/healthz >/var/log/healthz.log 2>&1 || true
-CRON
-RUN chmod 0644 /etc/cron.d/healthz
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

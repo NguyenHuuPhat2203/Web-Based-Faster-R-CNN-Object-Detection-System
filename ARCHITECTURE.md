@@ -73,8 +73,10 @@ painting WT as ED (2), then TC as NCR (1), then ET (4).
   strict key matching.
 - YOLOv8: `registry/yolo/<version>/yolov8_tumor.pt`, verified against
   `weights_sha256` in `metadata.json` when present.
-- Weights are never baked into images; Compose mounts `./registry`,
-  `./checkpoints`, and `./.weights` read-only.
+- Compose images never contain weights; Compose mounts `./registry`,
+  `./checkpoints`, and `./.weights` read-only. The Hugging Face Space image
+  (root `Dockerfile`) has no mounts, so its build pulls the weights pinned in
+  `models.lock.json`.
 - One Hugging Face model repo mirrors every weight file under `registry/`,
   `checkpoints/`, and `.weights/` at the same paths. `models.lock.json` pins
   the Hub commit that matches the code: `python -m scripts.sync_models pull`
